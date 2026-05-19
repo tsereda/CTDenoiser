@@ -63,8 +63,28 @@ avoid pip's sandboxing conflicting with Colab's system setuptools:
 
 ## Data
 
-`PairedCTDataset` expects two directories of `.npy` slices with matching
-filenames:
+Three input modes, in order of preference for real experiments:
+
+### 1. TCIA HDF5 cache (recommended)
+
+The preprocessing step (download from TCIA `LDCT-and-Projection-data`,
+DICOM → HU arrays) produces `ldct_cache.h5` with one dataset per
+patient/dose: `<pid>_low` and `<pid>_full`, each `(num_slices, H, W)` in
+raw Hounsfield units.
+
+```bash
+python -m ctdenoiser.train --model ctformer \
+    --h5-cache /content/ldct_cache.h5 \
+    --epochs 50 --batch-size 16
+```
+
+- Split is **by patient** (`--val-fraction`, `--seed`) to prevent leakage.
+- Training uses random `--patch-size` crops.
+- Validation runs **full-slice overlapped inference** (margin = patch/4)
+  and reports PSNR / SSIM / RMSE.
+- HU → `[0,1]` via `clamp((hu + 1000) / 2000, 0, 1)`.
+
+### 2. Paired `.npy` directories
 
 ```
 data/
@@ -72,5 +92,9 @@ data/
   full_dose/  slice_0001.npy ...
 ```
 
-Pass `--data-root data/` to `train.py`. With no data root a synthetic
-noisy/clean dataset is generated so the pipeline can be exercised end to end.
+`python -m ctdenoiser.train --data-root data/`
+
+### 3. Synthetic (smoke test)
+
+With neither `--h5-cache` nor `--data-root`, a synthetic noisy/clean
+dataset is generated so the pipeline runs end to end.
