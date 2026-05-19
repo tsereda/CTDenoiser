@@ -4,8 +4,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-data/
-checkpoints/
+/data/
+/checkpoints/
 *.npy
 *.pt
 *.pth
