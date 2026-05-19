@@ -27,6 +27,9 @@ tests/
 pip install -r requirements.txt
 ```
 
+No `pip install -e .` needed — run everything with `python -m ctdenoiser.*`
+from the repo root and Python's `-m` flag puts `.` on `sys.path` automatically.
+
 ## Quick start
 
 ```bash
@@ -35,6 +38,27 @@ python -m ctdenoiser.train --model ctformer --epochs 1
 
 # Run tests
 pytest -q
+```
+
+## Google Colab
+
+The active branch is `claude/init-project-setup-vWHBI`. After cloning you
+need to check it out explicitly — Colab clones `main` by default:
+
+```python
+!git fetch origin
+!git checkout claude/init-project-setup-vWHBI
+!git pull origin claude/init-project-setup-vWHBI
+!pip install -r requirements.txt
+!pytest -q                                         # sanity check
+!python -m ctdenoiser.train --model ctformer --epochs 1
+```
+
+If you prefer an editable install (optional), use `--no-build-isolation` to
+avoid pip's sandboxing conflicting with Colab's system setuptools:
+
+```python
+!pip install --no-build-isolation -e .
 ```
 
 ## Data
