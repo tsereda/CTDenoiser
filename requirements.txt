@@ -1,4 +1,5 @@
 torch>=2.0
 numpy>=1.23
 h5py>=3.0
+wandb>=0.17
 pytest>=7.0
