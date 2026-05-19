@@ -27,9 +27,34 @@ from .models import CTformer, REDCNN
 MODELS = {"ctformer": CTformer, "redcnn": REDCNN}
 
 
+_DRIVE_CACHE_FALLBACKS = [
+    "/content/drive/MyDrive/ldct_cache.h5",
+    "/content/drive/MyDrive/CTDenoiser/ldct_cache.h5",
+]
+
+
+def _resolve_h5(path: str) -> str:
+    """Return path if it exists, else try common Colab Drive locations."""
+    if Path(path).exists():
+        return path
+    for fb in _DRIVE_CACHE_FALLBACKS:
+        if Path(fb).exists():
+            print(f"Cache not found at {path!r} — using {fb!r} instead.")
+            return fb
+    raise FileNotFoundError(
+        f"HDF5 cache not found at {path!r}.\n"
+        "Options:\n"
+        "  1. Copy from Drive first (faster I/O):\n"
+        "       import shutil; shutil.copy('/content/drive/MyDrive/ldct_cache.h5', '/content/ldct_cache.h5')\n"
+        "  2. Pass the Drive path directly:\n"
+        "       --h5-cache /content/drive/MyDrive/ldct_cache.h5"
+    )
+
+
 def build_loaders(args):
     """Return (train_loader, val_loader, full_slice_eval)."""
     if args.h5_cache:
+        args.h5_cache = _resolve_h5(args.h5_cache)
         train_p, val_p = HDF5CTDataset.split_patients(
             args.h5_cache, val_fraction=args.val_fraction, seed=args.seed
         )
