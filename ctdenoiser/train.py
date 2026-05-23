@@ -19,6 +19,12 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
+try:
+    import wandb as _wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    _WANDB_AVAILABLE = False
+
 from .data.dataset import HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
 from .metrics import psnr, rmse, ssim
@@ -127,6 +133,8 @@ def main(argv=None):
     parser.add_argument("--synthetic-len", type=int, default=64)
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints")
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--wandb-project", type=str, default=None,
+                        help="W&B project name; enables per-epoch metric logging")
     args = parser.parse_args(argv)
 
     device = torch.device(
@@ -136,10 +144,22 @@ def main(argv=None):
     model = MODELS[args.model]().to(device)
     train_loader, val_loader, full_slice = build_loaders(args)
 
+    _wb = None
+    if args.wandb_project:
+        if _WANDB_AVAILABLE:
+            _wb = _wandb.init(
+                project=args.wandb_project,
+                config=vars(args),
+                resume="allow",
+            )
+        else:
+            print("wandb not installed; skipping W&B logging.")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = torch.nn.MSELoss()
 
     n_train = len(train_loader.dataset)
+    last_metrics = None
     for epoch in range(1, args.epochs + 1):
         model.train()
         running = 0.0
@@ -150,13 +170,26 @@ def main(argv=None):
             loss.backward()
             optimizer.step()
             running += loss.item() * low.size(0)
-        print(f"epoch {epoch}/{args.epochs}  loss={running / n_train:.6f}")
+        train_loss = running / n_train
+        print(f"epoch {epoch}/{args.epochs}  loss={train_loss:.6f}")
+        if _wb:
+            last_metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
+            _wb.log({
+                "epoch": epoch,
+                "train/loss": train_loss,
+                **{f"val/{k}": v for k, v in last_metrics.items()},
+            })
 
-    metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
+    if last_metrics is None:
+        last_metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
+    metrics = last_metrics
     print(
         f"eval  psnr={metrics['psnr']:.3f}  "
         f"ssim={metrics['ssim']:.4f}  rmse={metrics['rmse']:.5f}"
     )
+
+    if _wb:
+        _wb.finish()
 
     ckpt_dir = Path(args.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
