@@ -3,8 +3,8 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from ctdenoiser.inference import overlapped_inference
-from ctdenoiser.metrics import psnr, rmse, ssim
-from ctdenoiser.models import CTformer, REDCNN
+from ctdenoiser.metrics import gmsd, nps_ratio, psnr, rmse, ssim
+from ctdenoiser.models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
 
 
 @pytest.mark.parametrize("size", [64, 128])
@@ -26,6 +26,50 @@ def test_overlapped_inference_shape_and_coverage():
     out = overlapped_inference(model, img, patch_size=64, margin=16)
     assert out.shape == img.shape
     assert torch.isfinite(out).all()
+
+
+def test_dncnn_preserves_shape():
+    model = DnCNN(num_filters=16, num_layers=5)
+    x = torch.randn(2, 1, 64, 64)
+    assert model(x).shape == x.shape
+
+
+def test_unet_preserves_shape():
+    model = UNet(base_filters=8)
+    x = torch.randn(2, 1, 64, 64)
+    assert model(x).shape == x.shape
+
+
+def test_flowmatching_preserves_shape():
+    model = FlowMatching(num_filters=16, embed_dim=16, num_steps=2)
+    x = torch.randn(2, 1, 64, 64)
+    out = model(x)
+    assert out.shape == x.shape
+
+
+def test_flowmatching_flow_loss():
+    model = FlowMatching(num_filters=16, embed_dim=16, num_steps=2)
+    x0 = torch.randn(2, 1, 64, 64)
+    x1 = torch.randn(2, 1, 64, 64)
+    loss = model.flow_loss(x0, x1)
+    assert loss.ndim == 0
+    assert loss.item() >= 0
+    assert loss.requires_grad
+
+
+def test_flowmatching_overlapped_inference():
+    model = FlowMatching(num_filters=8, embed_dim=8, num_steps=2)
+    img = torch.randn(1, 1, 100, 130)
+    out = overlapped_inference(model, img, patch_size=64, margin=16)
+    assert out.shape == img.shape
+    assert torch.isfinite(out).all()
+
+
+def test_new_metrics():
+    a = torch.rand(2, 1, 64, 64)
+    b = torch.rand(2, 1, 64, 64)
+    assert gmsd(a, b) >= 0.0
+    assert nps_ratio(a, b) >= 0.0
 
 
 def test_metrics_identity():

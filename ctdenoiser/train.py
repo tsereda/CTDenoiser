@@ -27,10 +27,16 @@ except ImportError:
 
 from .data.dataset import HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
-from .metrics import psnr, rmse, ssim
-from .models import CTformer, REDCNN
+from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
+from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
 
-MODELS = {"ctformer": CTformer, "redcnn": REDCNN}
+MODELS = {
+    "ctformer": CTformer,
+    "dncnn": DnCNN,
+    "flowmatching": FlowMatching,
+    "redcnn": REDCNN,
+    "unet": UNet,
+}
 
 
 _DRIVE_CACHE_FALLBACKS = [
@@ -99,7 +105,7 @@ def build_loaders(args):
 @torch.no_grad()
 def evaluate(model, loader, device, full_slice, patch_size):
     model.eval()
-    n, p, s, r = 0, 0.0, 0.0, 0.0
+    n, p, s, r, g, nps = 0, 0.0, 0.0, 0.0, 0.0, 0.0
     for low, full in loader:
         low, full = low.to(device), full.to(device)
         if full_slice:
@@ -112,8 +118,10 @@ def evaluate(model, loader, device, full_slice, patch_size):
         p += psnr(pred, full) * bs
         s += ssim(pred, full) * bs
         r += rmse(pred, full) * bs
+        g += gmsd(pred, full) * bs
+        nps += nps_ratio(pred, full) * bs
         n += bs
-    return {"psnr": p / n, "ssim": s / n, "rmse": r / n}
+    return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
 
 
 def main(argv=None):
@@ -129,6 +137,8 @@ def main(argv=None):
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--patch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--flow-steps", type=int, default=20,
+                        help="Euler ODE steps at inference (flowmatching only)")
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--synthetic-len", type=int, default=64)
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints")
@@ -141,7 +151,10 @@ def main(argv=None):
         args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     )
     print(f"device={device}  model={args.model}")
-    model = MODELS[args.model]().to(device)
+    if args.model == "flowmatching":
+        model = FlowMatching(num_steps=args.flow_steps).to(device)
+    else:
+        model = MODELS[args.model]().to(device)
     train_loader, val_loader, full_slice = build_loaders(args)
 
     _wb = None
@@ -166,7 +179,10 @@ def main(argv=None):
         for low, full in train_loader:
             low, full = low.to(device), full.to(device)
             optimizer.zero_grad()
-            loss = criterion(model(low), full)
+            if hasattr(model, "flow_loss"):
+                loss = model.flow_loss(low, full)
+            else:
+                loss = criterion(model(low), full)
             loss.backward()
             optimizer.step()
             running += loss.item() * low.size(0)
@@ -184,8 +200,9 @@ def main(argv=None):
         last_metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
     metrics = last_metrics
     print(
-        f"eval  psnr={metrics['psnr']:.3f}  "
-        f"ssim={metrics['ssim']:.4f}  rmse={metrics['rmse']:.5f}"
+        f"eval  psnr={metrics['psnr']:.3f}  ssim={metrics['ssim']:.4f}  "
+        f"rmse={metrics['rmse']:.5f}  gmsd={metrics['gmsd']:.5f}  "
+        f"nps_ratio={metrics['nps_ratio']:.5f}"
     )
 
     if _wb:
