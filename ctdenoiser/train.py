@@ -103,8 +103,14 @@ def build_loaders(args):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, full_slice, patch_size):
+def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     model.eval()
+    # For flow matching, temporarily reduce ODE steps so validation doesn't
+    # take 20x longer than the equivalent deterministic model.
+    _orig_steps = getattr(model, "num_steps", None)
+    if _orig_steps is not None and eval_steps is not None:
+        model.num_steps = eval_steps
+
     n, p, s, r, g, nps = 0, 0.0, 0.0, 0.0, 0.0, 0.0
     for low, full in loader:
         low, full = low.to(device), full.to(device)
@@ -121,6 +127,9 @@ def evaluate(model, loader, device, full_slice, patch_size):
         g += gmsd(pred, full) * bs
         nps += nps_ratio(pred, full) * bs
         n += bs
+
+    if _orig_steps is not None:
+        model.num_steps = _orig_steps  # restore for checkpoint / further use
     return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
 
 
@@ -139,6 +148,9 @@ def main(argv=None):
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--flow-steps", type=int, default=20,
                         help="Euler ODE steps at inference (flowmatching only)")
+    parser.add_argument("--flow-steps-eval", type=int, default=5,
+                        help="Euler ODE steps during training-time validation (faster; "
+                             "use --flow-steps for final quality eval)")
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--synthetic-len", type=int, default=64)
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints")
@@ -189,7 +201,8 @@ def main(argv=None):
         train_loss = running / n_train
         print(f"epoch {epoch}/{args.epochs}  loss={train_loss:.6f}")
         if _wb:
-            last_metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
+            last_metrics = evaluate(model, val_loader, device, full_slice,
+                                    args.patch_size, eval_steps=args.flow_steps_eval)
             _wb.log({
                 "epoch": epoch,
                 "train/loss": train_loss,
@@ -197,7 +210,8 @@ def main(argv=None):
             })
 
     if last_metrics is None:
-        last_metrics = evaluate(model, val_loader, device, full_slice, args.patch_size)
+        last_metrics = evaluate(model, val_loader, device, full_slice,
+                                args.patch_size, eval_steps=args.flow_steps_eval)
     metrics = last_metrics
     print(
         f"eval  psnr={metrics['psnr']:.3f}  ssim={metrics['ssim']:.4f}  "
