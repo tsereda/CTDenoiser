@@ -42,13 +42,8 @@ pytest -q
 
 ## Google Colab
 
-The active branch is `claude/init-project-setup-vWHBI`. After cloning you
-need to check it out explicitly — Colab clones `main` by default:
-
 ```python
-!git fetch origin
-!git checkout claude/init-project-setup-vWHBI
-!git pull origin claude/init-project-setup-vWHBI
+!git pull
 !pip install -r requirements.txt
 !pytest -q                                         # sanity check
 !python -m ctdenoiser.train --model ctformer --epochs 1
