@@ -182,7 +182,7 @@ def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, ep
             plt.close(fig)
             buf.seek(0)
             from PIL import Image as _PILImage  # noqa: PLC0415 (PIL is a wandb dep)
-            panels.append(wb.Image(_PILImage.open(buf), caption=f"sample_{len(panels)+1}"))
+            panels.append(_wandb.Image(_PILImage.open(buf), caption=f"sample_{len(panels)+1}"))
         if len(panels) >= n:
             break
     if panels:
