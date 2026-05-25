@@ -25,6 +25,14 @@ try:
 except ImportError:
     _WANDB_AVAILABLE = False
 
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    _MPL_AVAILABLE = True
+except ImportError:
+    _MPL_AVAILABLE = False
+
 from .data.dataset import HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
@@ -133,6 +141,49 @@ def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
 
 
+@torch.no_grad()
+def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, epoch=None):
+    """Log a [low-dose | predicted | full-dose | |diff|] panel grid to W&B."""
+    if not _MPL_AVAILABLE:
+        return
+    import numpy as np
+    model.eval()
+    panels = []
+    for low, full in loader:
+        low, full = low.to(device), full.to(device)
+        if full_slice:
+            pred = overlapped_inference(
+                model, low, patch_size=patch_size, margin=patch_size // 4
+            ).clamp(0.0, 1.0)
+        else:
+            pred = model(low).clamp(0.0, 1.0)
+        for i in range(min(low.size(0), n - len(panels))):
+            l_img = low[i, 0].cpu().numpy()
+            p_img = pred[i, 0].cpu().numpy()
+            f_img = full[i, 0].cpu().numpy()
+            diff = np.abs(p_img - f_img)
+
+            fig, axes = plt.subplots(1, 4, figsize=(13, 3.2), dpi=100)
+            titles = ["Low-dose input", "Denoised (pred)", "Full-dose ref", "|Pred − Ref|"]
+            imgs = [l_img, p_img, f_img, diff]
+            vmaxes = [1.0, 1.0, 1.0, max(diff.max(), 1e-6)]
+            cmaps = ["gray", "gray", "gray", "hot"]
+            for ax, img, title, vmax, cmap in zip(axes, imgs, titles, vmaxes, cmaps):
+                im = ax.imshow(img, cmap=cmap, vmin=0, vmax=vmax)
+                ax.set_title(title, fontsize=9)
+                ax.axis("off")
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            epoch_str = f" — epoch {epoch}" if epoch is not None else ""
+            fig.suptitle(f"Sample {len(panels) + 1}{epoch_str}", fontsize=10, y=1.02)
+            plt.tight_layout()
+            panels.append(wb.Image(fig, caption=f"sample_{len(panels)+1}"))
+            plt.close(fig)
+        if len(panels) >= n:
+            break
+    if panels:
+        wb.log({"val/images": panels})
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Train a CT denoiser.")
     parser.add_argument("--model", choices=MODELS, default="ctformer")
@@ -157,6 +208,10 @@ def main(argv=None):
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--wandb-project", type=str, default=None,
                         help="W&B project name; enables per-epoch metric logging")
+    parser.add_argument("--log-images", type=int, default=4, metavar="N",
+                        help="number of val samples to log as images each epoch (0=off)")
+    parser.add_argument("--log-image-freq", type=int, default=1, metavar="FREQ",
+                        help="log images every FREQ epochs (default: every epoch)")
     args = parser.parse_args(argv)
 
     device = torch.device(
@@ -208,6 +263,9 @@ def main(argv=None):
                 "train/loss": train_loss,
                 **{f"val/{k}": v for k, v in last_metrics.items()},
             })
+            if args.log_images > 0 and epoch % args.log_image_freq == 0:
+                log_sample_images(model, val_loader, device, full_slice,
+                                  args.patch_size, _wb, n=args.log_images, epoch=epoch)
 
     if last_metrics is None:
         last_metrics = evaluate(model, val_loader, device, full_slice,
