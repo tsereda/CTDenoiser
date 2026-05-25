@@ -146,6 +146,7 @@ def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, ep
     """Log a [low-dose | predicted | full-dose | |diff|] panel grid to W&B."""
     if not _MPL_AVAILABLE:
         return
+    import io
     import numpy as np
     model.eval()
     panels = []
@@ -176,8 +177,12 @@ def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, ep
             epoch_str = f" — epoch {epoch}" if epoch is not None else ""
             fig.suptitle(f"Sample {len(panels) + 1}{epoch_str}", fontsize=10, y=1.02)
             plt.tight_layout()
-            panels.append(wb.Image(fig, caption=f"sample_{len(panels)+1}"))
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", bbox_inches="tight")
             plt.close(fig)
+            buf.seek(0)
+            from PIL import Image as _PILImage  # noqa: PLC0415 (PIL is a wandb dep)
+            panels.append(wb.Image(_PILImage.open(buf), caption=f"sample_{len(panels)+1}"))
         if len(panels) >= n:
             break
     if panels:
