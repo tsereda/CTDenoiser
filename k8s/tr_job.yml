@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mcscf-gnn-7
+  name: CTDenoiser-0
 spec:
   backoffLimit: 0
   template:
@@ -29,7 +29,7 @@ spec:
                   name: outlook-wandb-s
                   key: WANDB_API_KEY
             - name: WANDB_PROJECT
-              value: "fast-cwmd"
+              value: "CTDenoiser"
             - name: WANDB_ENTITY
               value: "timothy-sereda-usd"
             - name: WANDB_MODE
@@ -42,15 +42,11 @@ spec:
 
               pip install wandb torch_geometric
 
-              git clone https://github.com/tsereda/mcscf-gnn.git
-              cd mcscf-gnn
-
-              unzip /data/dec20.zip
-              sudo cp -r for-tim/ data/
+              git clone 
 
               python main.py --from-sweep b8wmr8rk
 
-              #wandb agent timothy-sereda-usd/gamess-gnn-sweep/b8wmr8rk
+              #wandb agent timothy-sereda-usd/
         
           volumeMounts:
             - name: workspace
@@ -76,7 +72,7 @@ spec:
             sizeLimit: 50Gi
         - name: data
           persistentVolumeClaim:
-            claimName: mcscfgnn-2
+            claimName: CTDenoiser
         - name: shm
           emptyDir:
             medium: Memory

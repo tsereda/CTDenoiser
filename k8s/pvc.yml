@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mcscfgnn-3
-  namespace: gai-lina-group
+  name: CTDenoiser
+  namespace: usd-djha 
 spec:
   accessModes:
     - ReadWriteMany
