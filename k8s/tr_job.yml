@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mcscf-gnn-7
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: wandb-sweep
+    spec:
+      nodeSelector:
+        #topology.kubernetes.io/region: us-west
+        nautilus.io/linstor: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: PreferNoSchedule
+
+      containers:
+        - name: brats-processing
+          image: gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/prp
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: outlook-wandb-s
+                  key: WANDB_API_KEY
+            - name: WANDB_PROJECT
+              value: "fast-cwmd"
+            - name: WANDB_ENTITY
+              value: "timothy-sereda-usd"
+            - name: WANDB_MODE
+              value: "online"
+
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              sudo apt-get update && sudo apt-get install -y p7zip-full wget git
+
+              pip install wandb torch_geometric
+
+              git clone https://github.com/tsereda/mcscf-gnn.git
+              cd mcscf-gnn
+
+              unzip /data/dec20.zip
+              sudo cp -r for-tim/ data/
+
+              python main.py --from-sweep b8wmr8rk
+
+              #wandb agent timothy-sereda-usd/gamess-gnn-sweep/b8wmr8rk
+        
+          volumeMounts:
+            - name: workspace
+              mountPath: /app
+            - name: data
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+        
+          resources:
+            requests:
+              memory: 10Gi
+              cpu: "10"
+              nvidia.com/a100: "1"
+            limits:
+              memory: 12Gi
+              cpu: "12"
+              nvidia.com/a100: "1"
+    
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 50Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: mcscfgnn-2
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+    
+      restartPolicy: Never
