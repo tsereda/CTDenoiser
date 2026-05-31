@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ctdenoiser-sweep
+  namespace: usd-djha
+  labels:
+    app: wandb-sweep
+    user: timgsereda
+spec:
+  completions: 1
+  parallelism: 1
+  completionMode: Indexed
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: wandb-sweep
+        user: timgsereda
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: sweep-agent
+          image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "32Gi"
+              nvidia.com/gpu: "1"
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            - name: WANDB_PROJECT
+              value: ctdenoiser-sweep
+            - name: WANDB_ENTITY
+              value: timgsereda
+          args:
+            - |
+              pip install wandb h5py matplotlib
+
+              git clone https://github.com/tsereda/ctdenoiser.git
+              cd ctdenoiser
+              pip install -e .
+
+              wandb agent timgsereda/ctdenoiser-sweep/SWEEP_ID
+          command: ["/bin/bash", "-c"]
