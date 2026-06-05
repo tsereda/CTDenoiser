@@ -1,8 +1,5 @@
 program: python -m ctdenoiser.train
-method: bayes
-metric:
-  name: val/psnr
-  goal: maximize
+method: grid
 
 entity: timgsereda
 project: ctdenoiser-sweep
@@ -15,17 +12,6 @@ parameters:
       - unet
       - ctformer
       - flowmatching
-
-  lr:
-    distribution: log_uniform_values
-    min: 1e-5
-    max: 1e-3
-
-  batch_size:
-    values: [4, 8, 16]
-
-  patch_size:
-    values: [64, 128]
 
   epochs:
     value: 50

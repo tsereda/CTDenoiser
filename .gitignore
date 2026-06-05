@@ -9,3 +9,4 @@ venv/
 *.npy
 *.pt
 *.pth
+k8s/sweep_job.yml
