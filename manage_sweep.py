@@ -103,10 +103,27 @@ pip install -e .
 
 
 def deploy_job(job_file):
-    """Deploy job to Kubernetes."""
+    """Deploy job to Kubernetes, replacing any existing job with the same name."""
     print(f"\nDeploying Indexed Job to Kubernetes (namespace: {NAMESPACE})...")
 
     try:
+        with open(job_file, 'r') as f:
+            job_yaml = yaml.safe_load(f)
+        job_name = job_yaml['metadata']['name']
+
+        existing = subprocess.run(
+            ['kubectl', 'get', 'job', job_name, '-n', NAMESPACE],
+            capture_output=True, text=True
+        )
+        if existing.returncode == 0:
+            print(f"  Deleting existing job '{job_name}'...")
+            subprocess.run(
+                ['kubectl', 'delete', 'job', job_name, '-n', NAMESPACE,
+                 '--cascade=foreground', '--wait=true'],
+                capture_output=True, text=True, check=True
+            )
+            print(f"  Deleted.")
+
         result = subprocess.run(
             ['kubectl', 'apply', '-f', job_file, '-n', NAMESPACE],
             capture_output=True,
