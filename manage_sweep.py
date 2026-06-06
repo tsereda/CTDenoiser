@@ -11,10 +11,13 @@ Usage:
 
 import os
 import sys
+import time
+import json
 import yaml
 import wandb
 import subprocess
 import argparse
+from datetime import datetime, timezone
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_PATH = os.path.join(SCRIPT_DIR, 'k8s', 'tr_job_template.yml')
@@ -196,6 +199,123 @@ def delete_jobs():
 
 
 # ============================================================================
+# POD MONITORING
+# ============================================================================
+
+JOB_NAME = 'ctdenoiser-sweep'
+POD_LABEL = f'job-name={JOB_NAME}'
+
+WAITING_PHASES = {'Pending', 'ContainerCreating', 'PodInitializing'}
+BAD_STATES = {'Error', 'CrashLoopBackOff', 'ImagePullBackOff',
+              'ErrImagePull', 'CreateContainerConfigError', 'OOMKilled'}
+
+
+def _kubectl(*args, check=True):
+    """Run kubectl with namespace and return stdout."""
+    cmd = ['kubectl', '-n', NAMESPACE] + list(args)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=check)
+    return result.stdout.strip()
+
+
+def _get_pods_json():
+    """Get pod list as parsed JSON."""
+    raw = _kubectl('get', 'pods', '-l', POD_LABEL, '-o', 'json', check=False)
+    if not raw:
+        return []
+    return json.loads(raw).get('items', [])
+
+
+def _pod_status(pod):
+    """Extract a human-readable status from a pod object."""
+    phase = pod['status'].get('phase', 'Unknown')
+    for cs in pod['status'].get('containerStatuses', []):
+        state = cs.get('state', {})
+        if 'waiting' in state:
+            return state['waiting'].get('reason', 'Waiting')
+        if 'terminated' in state:
+            reason = state['terminated'].get('reason', '')
+            return reason if reason else ('Completed' if state['terminated'].get('exitCode') == 0 else 'Error')
+        if 'running' in state:
+            return 'Running'
+    return phase
+
+
+def _print_pod_table(pods):
+    """Print a compact pod status table."""
+    if not pods:
+        print("  No pods found")
+        return
+    name_w = max(len(p['metadata']['name']) for p in pods)
+    for p in pods:
+        name = p['metadata']['name']
+        status = _pod_status(p)
+        node = p['spec'].get('nodeName', '<unscheduled>')
+        age_s = ''
+        start = p['status'].get('startTime')
+        if start:
+            dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+            delta = datetime.now(timezone.utc) - dt
+            mins = int(delta.total_seconds() // 60)
+            age_s = f'{mins}m' if mins < 60 else f'{mins // 60}h{mins % 60}m'
+        print(f"  {name:<{name_w}}  {status:<28} {node}  {age_s}")
+
+
+def watch_pods(interval=5, timeout=600):
+    """Poll pods until all have stabilized, then show describe/logs."""
+    print(f"\nWatching pods (label: {POD_LABEL}, poll every {interval}s)...\n")
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        pods = _get_pods_json()
+        # Clear line and redraw
+        sys.stdout.write(f"\033[2J\033[H")
+        print(f"=== Pod Status (namespace: {NAMESPACE}) ===\n")
+        _print_pod_table(pods)
+        print(f"\n  (timeout in {int(deadline - time.time())}s, Ctrl+C to stop)\n")
+
+        if not pods:
+            time.sleep(interval)
+            continue
+
+        statuses = [_pod_status(p) for p in pods]
+        all_settled = all(s not in WAITING_PHASES for s in statuses)
+
+        if all_settled:
+            failed = [(p, s) for p, s in zip(pods, statuses) if s in BAD_STATES]
+            running = [(p, s) for p, s in zip(pods, statuses) if s == 'Running']
+            succeeded = [(p, s) for p, s in zip(pods, statuses) if s == 'Completed']
+
+            if failed:
+                print(f"--- {len(failed)} pod(s) in error state, showing describe ---\n")
+                for p, s in failed:
+                    name = p['metadata']['name']
+                    print(f"=== kubectl describe pod {name} ===")
+                    print(_kubectl('describe', 'pod', name))
+                    print()
+            if succeeded:
+                print(f"--- {len(succeeded)} pod(s) completed ---\n")
+            if running:
+                print(f"--- {len(running)} pod(s) running, tailing logs from first ---\n")
+                name = running[0][0]['metadata']['name']
+                print(f"=== kubectl logs -f {name} ===\n")
+                try:
+                    subprocess.run(
+                        ['kubectl', '-n', NAMESPACE, 'logs', '-f', name],
+                        check=False
+                    )
+                except KeyboardInterrupt:
+                    pass
+            if not failed and not running:
+                print("All pods completed.")
+            return
+
+        time.sleep(interval)
+
+    print("\nTimeout reached. Final pod state:")
+    _print_pod_table(_get_pods_json())
+
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 
@@ -205,20 +325,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
-  # Create sweep + deploy 1 agent
-  python manage_sweep.py sweep.yml
+  python manage_sweep.py sweep.yml              # Create sweep + deploy 1 agent
+  python manage_sweep.py sweep.yml --agents 8   # Create sweep + deploy 8 agents
+  python manage_sweep.py --deploy dnffyu6j      # Deploy agents for existing sweep
 
-  # Create sweep + deploy 8 agents
-  python manage_sweep.py sweep.yml --agents 8
-
-  # Deploy agents to existing sweep
-  python manage_sweep.py --deploy dnffyu6j
-
-Tip:
-  kubectl get jobs -n {NAMESPACE} -l app=wandb-sweep
-  kubectl get pods -n {NAMESPACE} -l job-name=ctdenoiser-sweep
-  kubectl logs -f -n {NAMESPACE} job/ctdenoiser-sweep
-  python manage_sweep.py --delete
+  python manage_sweep.py --watch                # Watch pods until stable, then auto logs/describe
+  python manage_sweep.py --delete               # Delete all sweep jobs
         """
     )
 
@@ -230,11 +342,17 @@ Tip:
                         help='Deploy agents for existing sweep ID')
     parser.add_argument('--delete', action='store_true',
                         help='Delete all wandb sweep jobs')
+    parser.add_argument('--watch', action='store_true',
+                        help='Watch pods until stable, then show describe (errors) or logs (running)')
 
     args = parser.parse_args()
 
     if args.delete:
         delete_jobs()
+        sys.exit(0)
+
+    if args.watch:
+        watch_pods()
         sys.exit(0)
 
     if not args.sweep_file and not args.deploy:
@@ -276,9 +394,7 @@ Tip:
     print(f"View at: https://wandb.ai/{entity}/{project}/sweeps/{sweep_id}")
 
     print(f"\nMonitor:")
-    print(f"  kubectl get jobs -n {NAMESPACE} -l app=wandb-sweep")
-    print(f"  kubectl get pods -n {NAMESPACE} -l job-name=ctdenoiser-sweep")
-    print(f"  kubectl logs -f -n {NAMESPACE} job/ctdenoiser-sweep")
+    print(f"  python manage_sweep.py --watch     # auto-wait, then logs/describe")
 
     print(f"\nDelete all jobs:")
     print(f"  python manage_sweep.py --delete")
