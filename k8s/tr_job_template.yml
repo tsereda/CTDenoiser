@@ -96,7 +96,7 @@ spec:
             sizeLimit: 50Gi
         - name: data
           persistentVolumeClaim:
-            claimName: ctdenoiser-data
+            claimName: ctdenoiser
         - name: shm
           emptyDir:
             medium: Memory
