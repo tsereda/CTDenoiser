@@ -48,7 +48,7 @@ spec:
           from tcia_utils import nbia
           import pandas as pd, os
 
-          DICOM_DIR = '/data/ldct_dicom'
+          DICOM_DIR = '/tmp/ldct_dicom'
           MAX_PATIENTS = 10
 
           series = nbia.getSeries(collection='LDCT-and-Projection-data')
@@ -60,10 +60,11 @@ spec:
           print(f'Downloading {len(sub)} series for {len(paired)} patients...')
           os.makedirs(DICOM_DIR, exist_ok=True)
           nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=DICOM_DIR, input_type='list')
-          print('Done. Data saved to /data/ldct_dicom/')
+          print('Done. Data saved to /tmp/ldct_dicom/')
           "
 
-          echo "Download complete. Keeping pod alive for inspection."
+          sudo cp -r /tmp/ldct_dicom /data/ldct_dicom
+          echo "Download complete. Data copied to /data/ldct_dicom. Keeping pod alive for inspection."
           tail -f /dev/null
       volumeMounts:
         - name: workspace
