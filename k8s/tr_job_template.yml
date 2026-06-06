@@ -69,14 +69,20 @@ spec:
               value: timgsereda
           volumeMounts:
             - name: workspace
-              mountPath: /app
+              mountPath: /workspace
             - name: data
               mountPath: /data
+              readOnly: true
             - name: shm
               mountPath: /dev/shm
           args:
             - |
-              pip install wandb h5py matplotlib
+              pip install wandb matplotlib
+
+              # Copy zip from PVC and unzip to local emptyDir for fast I/O
+              cp /data/ldct_data.zip /workspace/
+              unzip -q /workspace/ldct_data.zip -d /workspace/data
+              rm /workspace/ldct_data.zip
 
               git clone https://github.com/tsereda/ctdenoiser.git
               cd ctdenoiser
