@@ -8,7 +8,40 @@ import torch
 from torch.utils.data import Dataset
 
 
-class DICOMCTDataset(Dataset):
+class _PairedCTBase(Dataset):
+    """Shared logic for paired low/full-dose CT datasets."""
+
+    low_volumes: dict[str, np.ndarray]
+    full_volumes: dict[str, np.ndarray]
+    samples: list[tuple[str, int]]
+    patch_size: int
+    train: bool
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        pid, i = self.samples[idx]
+        low = torch.from_numpy(self.low_volumes[pid][i]).unsqueeze(0)
+        full = torch.from_numpy(self.full_volumes[pid][i]).unsqueeze(0)
+        if self.train and self.patch_size:
+            _, h, w = low.shape
+            if h > self.patch_size and w > self.patch_size:
+                y = random.randint(0, h - self.patch_size)
+                x = random.randint(0, w - self.patch_size)
+                low = low[:, y : y + self.patch_size, x : x + self.patch_size]
+                full = full[:, y : y + self.patch_size, x : x + self.patch_size]
+        return low, full
+
+    @staticmethod
+    def _split(patients, val_fraction=0.2, seed=0):
+        rng = random.Random(seed)
+        rng.shuffle(patients)
+        n_val = max(1, int(round(len(patients) * val_fraction)))
+        return patients[n_val:], patients[:n_val]
+
+
+class DICOMCTDataset(_PairedCTBase):
     """Reads paired DICOM series directly from a root directory.
 
     Expects ``root`` to contain subdirectories named by SeriesInstanceUID,
@@ -110,26 +143,52 @@ class DICOMCTDataset(Dataset):
     @classmethod
     def split_patients(cls, root, val_fraction=0.2, seed=0):
         patients = cls.list_patients(root)
-        rng = random.Random(seed)
-        rng.shuffle(patients)
-        n_val = max(1, int(round(len(patients) * val_fraction)))
-        return patients[n_val:], patients[:n_val]
+        return cls._split(patients, val_fraction, seed)
 
-    def __len__(self):
-        return len(self.samples)
 
-    def __getitem__(self, idx):
-        pid, i = self.samples[idx]
-        low = torch.from_numpy(self.low_volumes[pid][i]).unsqueeze(0)
-        full = torch.from_numpy(self.full_volumes[pid][i]).unsqueeze(0)
-        if self.train and self.patch_size:
-            _, h, w = low.shape
-            if h > self.patch_size and w > self.patch_size:
-                y = random.randint(0, h - self.patch_size)
-                x = random.randint(0, w - self.patch_size)
-                low = low[:, y : y + self.patch_size, x : x + self.patch_size]
-                full = full[:, y : y + self.patch_size, x : x + self.patch_size]
-        return low, full
+class HDF5CTDataset(_PairedCTBase):
+    """Reads paired low/full dose CT from a preprocessed HDF5 file.
+
+    The HDF5 file should contain ``/patients/{id}/low`` and
+    ``/patients/{id}/full`` datasets (float32, already normalised to [0, 1]).
+    Use ``scripts/convert_dicom_to_h5.py`` to create one from DICOM data.
+    """
+
+    def __init__(self, h5_path, patients, patch_size=64, train=True):
+        import h5py
+
+        self.patch_size = patch_size
+        self.train = train
+        self.low_volumes: dict[str, np.ndarray] = {}
+        self.full_volumes: dict[str, np.ndarray] = {}
+        self.samples: list[tuple[str, int]] = []
+
+        with h5py.File(h5_path, "r") as f:
+            for pid in patients:
+                grp = f[f"patients/{pid}"]
+                low_vol = grp["low"][:]
+                full_vol = grp["full"][:]
+
+                n_slices = low_vol.shape[0]
+                self.low_volumes[pid] = low_vol
+                self.full_volumes[pid] = full_vol
+                for i in range(n_slices):
+                    self.samples.append((pid, i))
+
+        if not self.samples:
+            raise ValueError(f"No slices for patients {patients} in {h5_path}")
+
+    @staticmethod
+    def list_patients(h5_path):
+        import h5py
+
+        with h5py.File(h5_path, "r") as f:
+            return sorted(f["patients"].keys())
+
+    @classmethod
+    def split_patients(cls, h5_path, val_fraction=0.2, seed=0):
+        patients = cls.list_patients(h5_path)
+        return cls._split(patients, val_fraction, seed)
 
 
 class SyntheticCTDataset(Dataset):
