@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: CTDenoiser
+  name: ctdenoiser
   namespace: usd-djha 
 spec:
   accessModes:
