@@ -26,5 +26,5 @@ command:
   - ctdenoiser.train
   - --model=${model}
   - --epochs=${epochs}
-  - --data-root=/workspace/data
+  - --dicom-root=/workspace/data
   - --wandb-project=${wandb_project}

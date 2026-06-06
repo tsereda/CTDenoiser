@@ -33,7 +33,7 @@ try:
 except ImportError:
     _MPL_AVAILABLE = False
 
-from .data.dataset import HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
+from .data.dataset import DICOMCTDataset, HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
@@ -93,6 +93,27 @@ def build_loaders(args):
             num_workers=args.num_workers, pin_memory=True,
         )
         # Full slices vary in size -> batch_size must be 1.
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
+        return train_loader, val_loader, True
+
+    if args.dicom_root:
+        train_p, val_p = DICOMCTDataset.split_patients(
+            args.dicom_root, val_fraction=args.val_fraction, seed=args.seed
+        )
+        print(
+            f"DICOM root: {len(train_p)} train / {len(val_p)} val patients "
+            f"({train_p[:3]}... | {val_p})"
+        )
+        train_ds = DICOMCTDataset(
+            args.dicom_root, train_p, patch_size=args.patch_size, train=True
+        )
+        val_ds = DICOMCTDataset(
+            args.dicom_root, val_p, patch_size=args.patch_size, train=False
+        )
+        train_loader = DataLoader(
+            train_ds, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.num_workers, pin_memory=True,
+        )
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
         return train_loader, val_loader, True
 
@@ -196,6 +217,8 @@ def main(argv=None):
                         help="dir with low_dose/ and full_dose/ .npy slices")
     parser.add_argument("--h5-cache", type=str, default=None,
                         help="TCIA ldct_cache.h5 (<pid>_low / <pid>_full)")
+    parser.add_argument("--dicom-root", type=str, default=None,
+                        help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)

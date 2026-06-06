@@ -80,14 +80,12 @@ def generate_indexed_job(sweep_id, entity, project, num_agents=4):
     wandb_command = f"wandb agent {entity}/{project}/{sweep_id}"
     container['args'][0] = f"""set -e
 
-apt-get update && apt-get install -y --no-install-recommends git unzip && rm -rf /var/lib/apt/lists/*
+apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-pip install wandb matplotlib
+pip install wandb matplotlib pydicom
 
-# Copy zip from PVC and unzip to local emptyDir for fast I/O
-cp /data/ldct_data.zip /workspace/
-unzip -q /workspace/ldct_data.zip -d /workspace/data
-rm /workspace/ldct_data.zip
+# Copy DICOM series from PVC to local emptyDir for fast I/O
+cp -r /data/ldct_dicom /workspace/data
 
 git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
 cd /workspace/ctdenoiser
