@@ -16,9 +16,6 @@ parameters:
   epochs:
     value: 50
 
-  h5_cache:
-    value: /data/ldct_cache.h5
-
   wandb_project:
     value: ctdenoiser-sweep
 
@@ -28,9 +25,6 @@ command:
   - -m
   - ctdenoiser.train
   - --model=${model}
-  - --lr=${lr}
-  - --batch-size=${batch_size}
-  - --patch-size=${patch_size}
   - --epochs=${epochs}
-  - --h5-cache=${h5_cache}
+  - --data-root=/workspace/data
   - --wandb-project=${wandb_project}
