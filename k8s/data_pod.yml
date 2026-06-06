@@ -43,7 +43,27 @@ spec:
         - |
           sudo apt-get update && sudo apt-get install -y p7zip-full wget git
           pip install tcia_utils pydicom pandas h5py
-          echo "Ready. Run: kubectl exec -it ctdenoiser-data -n usd-djha -- bash"
+
+          python3 -c "
+          from tcia_utils import nbia
+          import pandas as pd, os
+
+          DICOM_DIR = '/data/ldct_dicom'
+          MAX_PATIENTS = 10
+
+          series = nbia.getSeries(collection='LDCT-and-Projection-data')
+          df = pd.DataFrame(series)
+          imgs = df[(df['BodyPartExamined']=='ABDOMEN') & df['SeriesDescription'].isin(['Low Dose Images','Full Dose Images'])]
+          by_pt = imgs.groupby('PatientID')['SeriesDescription'].apply(set)
+          paired = by_pt[by_pt.apply(lambda x: 'Low Dose Images' in x and 'Full Dose Images' in x)].index.tolist()[:MAX_PATIENTS]
+          sub = imgs[imgs['PatientID'].isin(paired)]
+          print(f'Downloading {len(sub)} series for {len(paired)} patients...')
+          os.makedirs(DICOM_DIR, exist_ok=True)
+          nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=DICOM_DIR, input_type='list')
+          print('Done. Data saved to /data/ldct_dicom/')
+          "
+
+          echo "Download complete. Keeping pod alive for inspection."
           tail -f /dev/null
       volumeMounts:
         - name: workspace
