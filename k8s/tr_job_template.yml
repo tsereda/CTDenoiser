@@ -77,6 +77,10 @@ spec:
               mountPath: /dev/shm
           args:
             - |
+              set -e
+
+              apt-get update && apt-get install -y --no-install-recommends git unzip && rm -rf /var/lib/apt/lists/*
+
               pip install wandb matplotlib
 
               # Copy zip from PVC and unzip to local emptyDir for fast I/O
@@ -84,8 +88,8 @@ spec:
               unzip -q /workspace/ldct_data.zip -d /workspace/data
               rm /workspace/ldct_data.zip
 
-              git clone https://github.com/tsereda/ctdenoiser.git
-              cd ctdenoiser
+              git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
+              cd /workspace/ctdenoiser
               pip install -e .
 
               wandb agent timgsereda/ctdenoiser-sweep/SWEEP_ID
