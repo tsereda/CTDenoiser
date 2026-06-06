@@ -13,8 +13,9 @@ ctdenoiser/
     ctformer.py     # CTformer (T2TD / IT2TD + Transformer blocks)
     redcnn.py       # RED-CNN baseline
   data/
-    dataset.py      # paired low-dose / full-dose patch dataset
-  metrics.py        # PSNR / SSIM / RMSE
+    dataset.py      # DICOMCTDataset + SyntheticCTDataset
+    dicom.py        # DICOM series reader (HU conversion)
+  metrics.py        # PSNR / SSIM / RMSE / GMSD / NPS-ratio
   inference.py      # overlapped full-slice inference
   train.py          # training loop / CLI
 tests/
@@ -24,72 +25,48 @@ tests/
 ## Install
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
-
-No `pip install -e .` needed — run everything with `python -m ctdenoiser.*`
-from the repo root and Python's `-m` flag puts `.` on `sys.path` automatically.
 
 ## Quick start
 
 ```bash
-# Train (synthetic data if --data-root is omitted, for smoke testing)
+# Smoke test (synthetic data)
 python -m ctdenoiser.train --model ctformer --epochs 1
+
+# Train on DICOM data (patient-split, full-slice overlapped-inference eval)
+python -m ctdenoiser.train --model ctformer \
+    --dicom-root /data/ldct_dicom --epochs 50 --batch-size 16
 
 # Run tests
 pytest -q
 ```
 
-## Google Colab
-
-```python
-!git pull
-!pip install -r requirements.txt
-!pytest -q                                         # sanity check
-!python -m ctdenoiser.train --model ctformer --epochs 1
-```
-
-If you prefer an editable install (optional), use `--no-build-isolation` to
-avoid pip's sandboxing conflicting with Colab's system setuptools:
-
-```python
-!pip install --no-build-isolation -e .
-```
-
 ## Data
 
-Three input modes, in order of preference for real experiments:
+### DICOM series directories
 
-### 1. TCIA HDF5 cache (recommended)
+Point `--dicom-root` at a directory of TCIA LDCT SeriesInstanceUID
+subdirectories, each containing `.dcm` files. Low/full dose is detected
+automatically from the DICOM `SeriesDescription` header and paired by
+`PatientID`.
 
-The preprocessing step (download from TCIA `LDCT-and-Projection-data`,
-DICOM → HU arrays) produces `ldct_cache.h5` with one dataset per
-patient/dose: `<pid>_low` and `<pid>_full`, each `(num_slices, H, W)` in
-raw Hounsfield units.
-
-```bash
-python -m ctdenoiser.train --model ctformer \
-    --h5-cache /content/ldct_cache.h5 \
-    --epochs 50 --batch-size 16
+```
+ldct_dicom/
+  1.2.840.113713.4.100.1.2.xxx/   # Low Dose Images
+    1-001.dcm  1-002.dcm  ...
+  1.2.840.113713.4.100.1.2.yyy/   # Full Dose Images
+    1-001.dcm  1-002.dcm  ...
+  ...
 ```
 
 - Split is **by patient** (`--val-fraction`, `--seed`) to prevent leakage.
 - Training uses random `--patch-size` crops.
 - Validation runs **full-slice overlapped inference** (margin = patch/4)
-  and reports PSNR / SSIM / RMSE.
+  and reports PSNR / SSIM / RMSE / GMSD / NPS-ratio.
 - HU → `[0,1]` via `clamp((hu + 1000) / 2000, 0, 1)`.
 
-### 2. Paired `.npy` directories
+### Synthetic (smoke test)
 
-```
-data/
-  low_dose/   slice_0001.npy ...
-  full_dose/  slice_0001.npy ...
-```
-
-`python -m ctdenoiser.train --data-root data/`
-
-### 3. Synthetic (smoke test)
-
-With neither `--h5-cache` nor `--data-root`, a synthetic noisy/clean
-dataset is generated so the pipeline runs end to end.
+Without `--dicom-root`, a synthetic noisy/clean dataset is generated so the
+pipeline runs end to end.

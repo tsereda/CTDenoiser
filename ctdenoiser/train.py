@@ -5,12 +5,9 @@ Examples
     # synthetic smoke run
     python -m ctdenoiser.train --model ctformer --epochs 1
 
-    # paired .npy directories
-    python -m ctdenoiser.train --model redcnn --data-root data/ --epochs 50
-
-    # TCIA HDF5 cache (patient-split, full-slice overlapped-inference eval)
+    # DICOM series directories (patient-split, full-slice overlapped-inference eval)
     python -m ctdenoiser.train --model ctformer \
-        --h5-cache /content/ldct_cache.h5 --epochs 50 --batch-size 16
+        --dicom-root /data/ldct_dicom --epochs 50 --batch-size 16
 """
 
 import argparse
@@ -33,7 +30,7 @@ try:
 except ImportError:
     _MPL_AVAILABLE = False
 
-from .data.dataset import DICOMCTDataset, HDF5CTDataset, PairedCTDataset, SyntheticCTDataset
+from .data.dataset import DICOMCTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
@@ -47,55 +44,8 @@ MODELS = {
 }
 
 
-_DRIVE_CACHE_FALLBACKS = [
-    "/content/drive/MyDrive/ldct_cache.h5",
-    "/content/drive/MyDrive/CTDenoiser/ldct_cache.h5",
-]
-
-
-def _resolve_h5(path: str) -> str:
-    """Return path if it exists, else try common Colab Drive locations."""
-    if Path(path).exists():
-        return path
-    for fb in _DRIVE_CACHE_FALLBACKS:
-        if Path(fb).exists():
-            print(f"Cache not found at {path!r} — using {fb!r} instead.")
-            return fb
-    raise FileNotFoundError(
-        f"HDF5 cache not found at {path!r}.\n"
-        "Options:\n"
-        "  1. Copy from Drive first (faster I/O):\n"
-        "       import shutil; shutil.copy('/content/drive/MyDrive/ldct_cache.h5', '/content/ldct_cache.h5')\n"
-        "  2. Pass the Drive path directly:\n"
-        "       --h5-cache /content/drive/MyDrive/ldct_cache.h5"
-    )
-
-
 def build_loaders(args):
     """Return (train_loader, val_loader, full_slice_eval)."""
-    if args.h5_cache:
-        args.h5_cache = _resolve_h5(args.h5_cache)
-        train_p, val_p = HDF5CTDataset.split_patients(
-            args.h5_cache, val_fraction=args.val_fraction, seed=args.seed
-        )
-        print(
-            f"HDF5 cache: {len(train_p)} train / {len(val_p)} val patients "
-            f"({train_p[:3]}... | {val_p})"
-        )
-        train_ds = HDF5CTDataset(
-            args.h5_cache, train_p, patch_size=args.patch_size, train=True
-        )
-        val_ds = HDF5CTDataset(
-            args.h5_cache, val_p, patch_size=args.patch_size, train=False
-        )
-        train_loader = DataLoader(
-            train_ds, batch_size=args.batch_size, shuffle=True,
-            num_workers=args.num_workers, pin_memory=True,
-        )
-        # Full slices vary in size -> batch_size must be 1.
-        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
-        return train_loader, val_loader, True
-
     if args.dicom_root:
         train_p, val_p = DICOMCTDataset.split_patients(
             args.dicom_root, val_fraction=args.val_fraction, seed=args.seed
@@ -117,13 +67,10 @@ def build_loaders(args):
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
         return train_loader, val_loader, True
 
-    if args.data_root:
-        ds = PairedCTDataset(args.data_root, patch_size=args.patch_size)
-    else:
-        print("No --data-root / --h5-cache; using SyntheticCTDataset.")
-        ds = SyntheticCTDataset(
-            length=args.synthetic_len, patch_size=args.patch_size
-        )
+    print("No --dicom-root; using SyntheticCTDataset.")
+    ds = SyntheticCTDataset(
+        length=args.synthetic_len, patch_size=args.patch_size
+    )
     loader = DataLoader(
         ds, batch_size=args.batch_size, shuffle=True,
         num_workers=args.num_workers,
@@ -134,8 +81,6 @@ def build_loaders(args):
 @torch.no_grad()
 def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     model.eval()
-    # For flow matching, temporarily reduce ODE steps so validation doesn't
-    # take 20x longer than the equivalent deterministic model.
     _orig_steps = getattr(model, "num_steps", None)
     if _orig_steps is not None and eval_steps is not None:
         model.num_steps = eval_steps
@@ -158,7 +103,7 @@ def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
         n += bs
 
     if _orig_steps is not None:
-        model.num_steps = _orig_steps  # restore for checkpoint / further use
+        model.num_steps = _orig_steps
     return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
 
 
@@ -213,10 +158,6 @@ def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, ep
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Train a CT denoiser.")
     parser.add_argument("--model", choices=MODELS, default="ctformer")
-    parser.add_argument("--data-root", type=str, default=None,
-                        help="dir with low_dose/ and full_dose/ .npy slices")
-    parser.add_argument("--h5-cache", type=str, default=None,
-                        help="TCIA ldct_cache.h5 (<pid>_low / <pid>_full)")
     parser.add_argument("--dicom-root", type=str, default=None,
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--val-fraction", type=float, default=0.2)
