@@ -315,73 +315,6 @@ def watch_pods(interval=5, timeout=600):
     _print_pod_table(_get_pods_json())
 
 
-def show_logs(pod_name=None, follow=True):
-    """Show logs for a sweep pod."""
-    if pod_name:
-        target = pod_name
-    else:
-        pods = _get_pods_json()
-        running = [p for p in pods if _pod_status(p) == 'Running']
-        candidates = running if running else pods
-        if not candidates:
-            print("No pods found")
-            return
-        if len(candidates) == 1:
-            target = candidates[0]['metadata']['name']
-        else:
-            print("Multiple pods found:\n")
-            for i, p in enumerate(candidates):
-                print(f"  [{i}] {p['metadata']['name']}  ({_pod_status(p)})")
-            try:
-                choice = int(input(f"\nSelect pod [0-{len(candidates)-1}]: "))
-                target = candidates[choice]['metadata']['name']
-            except (ValueError, IndexError, KeyboardInterrupt):
-                return
-
-    print(f"\n=== kubectl logs {'-f ' if follow else ''}{target} ===\n")
-    cmd = ['kubectl', '-n', NAMESPACE, 'logs']
-    if follow:
-        cmd.append('-f')
-    cmd.append(target)
-    try:
-        subprocess.run(cmd, check=False)
-    except KeyboardInterrupt:
-        pass
-
-
-def show_describe(pod_name=None):
-    """Describe a sweep pod."""
-    if pod_name:
-        target = pod_name
-    else:
-        pods = _get_pods_json()
-        if not pods:
-            print("No pods found")
-            return
-        if len(pods) == 1:
-            target = pods[0]['metadata']['name']
-        else:
-            print("Multiple pods found:\n")
-            for i, p in enumerate(pods):
-                print(f"  [{i}] {p['metadata']['name']}  ({_pod_status(p)})")
-            try:
-                choice = int(input(f"\nSelect pod [0-{len(pods)-1}]: "))
-                target = pods[choice]['metadata']['name']
-            except (ValueError, IndexError, KeyboardInterrupt):
-                return
-
-    print(f"\n=== kubectl describe pod {target} ===\n")
-    print(_kubectl('describe', 'pod', target))
-
-
-def show_pods():
-    """Quick pod status check."""
-    pods = _get_pods_json()
-    print(f"\n=== Pod Status (namespace: {NAMESPACE}) ===\n")
-    _print_pod_table(pods)
-    print()
-
-
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
@@ -397,10 +330,6 @@ Examples:
   python manage_sweep.py --deploy dnffyu6j      # Deploy agents for existing sweep
 
   python manage_sweep.py --watch                # Watch pods until stable, then auto logs/describe
-  python manage_sweep.py --pods                 # Quick pod status check
-  python manage_sweep.py --logs                 # Tail logs (auto-picks running pod)
-  python manage_sweep.py --logs POD_NAME        # Tail specific pod
-  python manage_sweep.py --describe             # Describe pod (auto-picks if only one)
   python manage_sweep.py --delete               # Delete all sweep jobs
         """
     )
@@ -415,12 +344,6 @@ Examples:
                         help='Delete all wandb sweep jobs')
     parser.add_argument('--watch', action='store_true',
                         help='Watch pods until stable, then show describe (errors) or logs (running)')
-    parser.add_argument('--pods', action='store_true',
-                        help='Show current pod status')
-    parser.add_argument('--logs', nargs='?', const='__auto__', metavar='POD',
-                        help='Tail logs (auto-selects running pod, or specify name)')
-    parser.add_argument('--describe', nargs='?', const='__auto__', metavar='POD',
-                        help='Describe a pod (auto-selects if only one)')
 
     args = parser.parse_args()
 
@@ -430,18 +353,6 @@ Examples:
 
     if args.watch:
         watch_pods()
-        sys.exit(0)
-
-    if args.pods:
-        show_pods()
-        sys.exit(0)
-
-    if args.logs is not None:
-        show_logs(pod_name=None if args.logs == '__auto__' else args.logs)
-        sys.exit(0)
-
-    if args.describe is not None:
-        show_describe(pod_name=None if args.describe == '__auto__' else args.describe)
         sys.exit(0)
 
     if not args.sweep_file and not args.deploy:
@@ -484,9 +395,6 @@ Examples:
 
     print(f"\nMonitor:")
     print(f"  python manage_sweep.py --watch     # auto-wait, then logs/describe")
-    print(f"  python manage_sweep.py --pods      # quick status check")
-    print(f"  python manage_sweep.py --logs      # tail logs")
-    print(f"  python manage_sweep.py --describe   # describe pod")
 
     print(f"\nDelete all jobs:")
     print(f"  python manage_sweep.py --delete")
