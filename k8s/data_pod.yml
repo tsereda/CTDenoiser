@@ -41,9 +41,18 @@ spec:
       command: ["/bin/bash", "-c"]
       args:
         - |
-          sudo apt-get update && sudo apt-get install -y p7zip-full wget git
+          set -e
+
+          sudo apt-get update && sudo apt-get install -y p7zip-full wget git openssh-client
           pip install tcia_utils pydicom pandas h5py
 
+          # Set up GitHub SSH key
+          mkdir -p ~/.ssh
+          cp /secrets/ssh/ssh-privatekey ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Download DICOM data from TCIA
           python3 -c "
           from tcia_utils import nbia
           import pandas as pd, os
@@ -64,7 +73,20 @@ spec:
           "
 
           sudo cp -r /tmp/ldct_dicom /data/ldct_dicom
-          echo "Download complete. Data copied to /data/ldct_dicom. Keeping pod alive for inspection."
+          echo "Download complete. Data copied to /data/ldct_dicom."
+
+          # Clone the repo and run DICOM-to-HDF5 conversion
+          git clone git@github.com:tsereda/ctdenoiser.git /app/ctdenoiser
+          cd /app/ctdenoiser
+          pip install -e .
+
+          echo "Running DICOM to HDF5 conversion..."
+          python scripts/convert_dicom_to_h5.py \
+            --dicom-root /data/ldct_dicom \
+            --output /data/ldct_preprocessed.h5
+          echo "Conversion complete. HDF5 saved to /data/ldct_preprocessed.h5"
+
+          echo "Keeping pod alive for inspection."
           tail -f /dev/null
       volumeMounts:
         - name: workspace
@@ -73,6 +95,9 @@ spec:
           mountPath: /data
         - name: shm
           mountPath: /dev/shm
+        - name: github-ssh-key
+          mountPath: /secrets/ssh
+          readOnly: true
       resources:
         requests:
           memory: 24Gi
@@ -93,3 +118,7 @@ spec:
       emptyDir:
         medium: Memory
         sizeLimit: 16Gi
+    - name: github-ssh-key
+      secret:
+        secretName: github-ssh-key
+        defaultMode: 0400
