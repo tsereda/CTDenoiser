@@ -30,7 +30,7 @@ try:
 except ImportError:
     _MPL_AVAILABLE = False
 
-from .data.dataset import DICOMCTDataset, SyntheticCTDataset
+from .data.dataset import DICOMCTDataset, HDF5CTDataset, SyntheticCTDataset
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
@@ -46,6 +46,27 @@ MODELS = {
 
 def build_loaders(args):
     """Return (train_loader, val_loader, full_slice_eval)."""
+    if getattr(args, "h5_path", None):
+        train_p, val_p = HDF5CTDataset.split_patients(
+            args.h5_path, val_fraction=args.val_fraction, seed=args.seed
+        )
+        print(
+            f"HDF5: {len(train_p)} train / {len(val_p)} val patients "
+            f"({train_p[:3]}... | {val_p})"
+        )
+        train_ds = HDF5CTDataset(
+            args.h5_path, train_p, patch_size=args.patch_size, train=True
+        )
+        val_ds = HDF5CTDataset(
+            args.h5_path, val_p, patch_size=args.patch_size, train=False
+        )
+        train_loader = DataLoader(
+            train_ds, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.num_workers, pin_memory=True,
+        )
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
+        return train_loader, val_loader, True
+
     if args.dicom_root:
         train_p, val_p = DICOMCTDataset.split_patients(
             args.dicom_root, val_fraction=args.val_fraction, seed=args.seed
@@ -67,7 +88,7 @@ def build_loaders(args):
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
         return train_loader, val_loader, True
 
-    print("No --dicom-root; using SyntheticCTDataset.")
+    print("No --h5-path or --dicom-root; using SyntheticCTDataset.")
     ds = SyntheticCTDataset(
         length=args.synthetic_len, patch_size=args.patch_size
     )
@@ -160,6 +181,8 @@ def main(argv=None):
     parser.add_argument("--model", choices=MODELS, default="ctformer")
     parser.add_argument("--dicom-root", type=str, default=None,
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
+    parser.add_argument("--h5-path", type=str, default=None,
+                        help="preprocessed HDF5 file (see scripts/convert_dicom_to_h5.py)")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)

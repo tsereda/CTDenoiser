@@ -81,10 +81,13 @@ spec:
 
               apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-              pip install wandb matplotlib pydicom
+              pip install wandb matplotlib h5py
 
-              # Copy DICOM series from PVC to local emptyDir for fast I/O
-              cp -r /data/ldct_dicom /workspace/data
+              # Copy preprocessed HDF5 from PVC to local emptyDir for fast I/O
+              echo "Copying preprocessed data..."
+              t0=$(date +%s)
+              cp /data/ldct_preprocessed.h5 /workspace/data.h5
+              echo "Copy done: $(du -h /workspace/data.h5 | cut -f1) in $(($(date +%s) - t0))s"
 
               git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
               cd /workspace/ctdenoiser
