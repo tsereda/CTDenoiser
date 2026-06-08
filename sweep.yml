@@ -24,7 +24,5 @@ command:
   - python
   - -m
   - ctdenoiser.train
-  - --model=${model}
-  - --epochs=${epochs}
+  - ${args}
   - --h5-path=/workspace/data.h5
-  - --wandb-project=${wandb_project}
