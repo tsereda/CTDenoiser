@@ -8,8 +8,6 @@ metadata:
     user: timgsereda
 spec:
   restartPolicy: Never
-  nodeSelector:
-    nautilus.io/linstor: "true"
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -41,16 +39,9 @@ spec:
       command: ["/bin/bash", "-c"]
       args:
         - |
-          set -e
 
           sudo apt-get update && sudo apt-get install -y p7zip-full wget git openssh-client
           pip install tcia_utils pydicom pandas h5py
-
-          # Set up GitHub SSH key
-          mkdir -p ~/.ssh
-          cp /secrets/ssh/ssh-privatekey ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 
           # Download DICOM data from TCIA
           python3 -c "
@@ -95,9 +86,6 @@ spec:
           mountPath: /data
         - name: shm
           mountPath: /dev/shm
-        - name: github-ssh-key
-          mountPath: /secrets/ssh
-          readOnly: true
       resources:
         requests:
           memory: 24Gi
@@ -118,7 +106,3 @@ spec:
       emptyDir:
         medium: Memory
         sizeLimit: 16Gi
-    - name: github-ssh-key
-      secret:
-        secretName: github-ssh-key
-        defaultMode: 0400
