@@ -16,9 +16,6 @@ parameters:
   epochs:
     value: 50
 
-  wandb_project:
-    value: ctdenoiser-sweep
-
 command:
   - ${env}
   - python
@@ -26,3 +23,4 @@ command:
   - ctdenoiser.train
   - ${args}
   - --h5-path=/workspace/data.h5
+  - --wandb-project=ctdenoiser-sweep
