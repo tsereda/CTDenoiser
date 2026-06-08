@@ -9,12 +9,76 @@ can copy in seconds instead of minutes.
 
 import argparse
 import time
+from pathlib import Path
 
 import h5py
 import numpy as np
 
-from ctdenoiser.data.dataset import DICOMCTDataset
-from ctdenoiser.data.dicom import read_series_hu
+
+def read_series_hu(series_dir: str) -> np.ndarray:
+    """Load sorted DICOM slices from a directory and return HU volume."""
+    try:
+        import pydicom
+    except ImportError as exc:
+        raise ImportError("pydicom is required: pip install pydicom") from exc
+
+    dcms = sorted(
+        Path(series_dir).glob("*.dcm"),
+        key=lambda p: float(
+            pydicom.dcmread(str(p), stop_before_pixels=True).ImagePositionPatient[2]
+        ),
+    )
+    if not dcms:
+        raise ValueError(f"No .dcm files in {series_dir}")
+
+    slices = []
+    for p in dcms:
+        ds = pydicom.dcmread(str(p))
+        hu = (
+            ds.pixel_array.astype(np.float32) * float(ds.RescaleSlope)
+            + float(ds.RescaleIntercept)
+        )
+        slices.append(hu)
+    return np.stack(slices, axis=0)
+
+
+def scan_paired_series(root: str) -> dict[str, dict[str, Path]]:
+    """Return {patient_id: {low: Path, full: Path}} for paired DICOM series."""
+    try:
+        import pydicom
+    except ImportError as exc:
+        raise ImportError("pydicom is required: pip install pydicom") from exc
+
+    root_path = Path(root)
+    mapping: dict[str, dict[str, Path]] = {}
+    for sdir in sorted(root_path.iterdir()):
+        if not sdir.is_dir():
+            continue
+        dcm_files = list(sdir.glob("*.dcm"))
+        if not dcm_files:
+            continue
+        hdr = pydicom.dcmread(str(dcm_files[0]), stop_before_pixels=True)
+        pid = str(hdr.PatientID)
+        desc = str(getattr(hdr, "SeriesDescription", "")).lower()
+        if "low dose" in desc:
+            dose = "low"
+        elif "full dose" in desc:
+            dose = "full"
+        else:
+            continue
+        mapping.setdefault(pid, {})
+        mapping[pid][dose] = sdir
+
+    complete = {
+        pid: series
+        for pid, series in mapping.items()
+        if "low" in series and "full" in series
+    }
+    if not complete:
+        raise ValueError(
+            f"No paired low/full dose patients found in {root}. Detected: {mapping}"
+        )
+    return complete
 
 
 def main():
@@ -41,7 +105,7 @@ def main():
     )
     args = parser.parse_args()
 
-    mapping = DICOMCTDataset._scan_series(args.dicom_root)
+    mapping = scan_paired_series(args.dicom_root)
     patients = sorted(mapping.keys())
     print(f"Found {len(patients)} paired patients: {patients}")
 

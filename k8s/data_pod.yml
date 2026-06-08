@@ -8,41 +8,15 @@ metadata:
     user: timgsereda
 spec:
   restartPolicy: Never
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: nvidia.com/gpu.product
-            operator: In
-            values:
-            - NVIDIA-A10
-            - NVIDIA-GeForce-RTX-3090
-            - NVIDIA-GeForce-RTX-4090
-            - NVIDIA-TITAN-RTX
-            - NVIDIA-RTX-A5000
-            - Quadro-RTX-6000
-            - Tesla-V100-SXM2-32GB
-            - NVIDIA-A40
-            - NVIDIA-L40
-            - NVIDIA-RTX-A6000
-            - Quadro-RTX-8000
-  tolerations:
-    - key: nvidia.com/gpu
-      operator: Exists
-      effect: NoSchedule
-    - key: nvidia.com/gpu
-      operator: Exists
-      effect: PreferNoSchedule
   containers:
     - name: data-loader
-      image: gitlab-registry.nrp-nautilus.io/prp/jupyter-stack/prp
+      image: python:3.11-slim
       command: ["/bin/bash", "-c"]
       args:
         - |
 
-          sudo apt-get update && sudo apt-get install -y p7zip-full wget git openssh-client
-          pip install tcia_utils pydicom pandas h5py
+          apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+          pip install --no-cache-dir tcia_utils pydicom pandas h5py numpy
 
           # Download DICOM data from TCIA
           python3 -c "
@@ -64,22 +38,18 @@ spec:
           print('Done. Data saved to /tmp/ldct_dicom/')
           "
 
-          sudo cp -r /tmp/ldct_dicom /data/ldct_dicom
+          cp -r /tmp/ldct_dicom /data/ldct_dicom
           echo "Download complete. Data copied to /data/ldct_dicom."
 
           # Clone the repo and run DICOM-to-HDF5 conversion
           git clone https://github.com/tsereda/ctdenoiser.git /app/ctdenoiser
           cd /app/ctdenoiser
-          pip install -e .
 
           echo "Running DICOM to HDF5 conversion..."
           python scripts/convert_dicom_to_h5.py \
             --dicom-root /data/ldct_dicom \
             --output /data/ldct_preprocessed.h5
           echo "Conversion complete. HDF5 saved to /data/ldct_preprocessed.h5"
-
-          echo "Keeping pod alive for inspection."
-          tail -f /dev/null
       volumeMounts:
         - name: workspace
           mountPath: /app
@@ -89,13 +59,11 @@ spec:
           mountPath: /dev/shm
       resources:
         requests:
-          memory: 24Gi
-          cpu: "12"
-          nvidia.com/gpu: "1"
+          memory: 8Gi
+          cpu: "2"
         limits:
-          memory: 32Gi
-          cpu: "16"
-          nvidia.com/gpu: "1"
+          memory: 16Gi
+          cpu: "4"
   volumes:
     - name: workspace
       emptyDir:
