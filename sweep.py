@@ -3,10 +3,10 @@
 CTDenoiser Training Management - Kubernetes Jobs
 
 Usage:
-    python manage_sweep.py                      # Print help
-    python manage_sweep.py sweep.yml            # Create sweep + deploy 1 agent
-    python manage_sweep.py sweep.yml --agents 8 # Create sweep + deploy 8 agents
-    python manage_sweep.py --deploy SWEEP_ID    # Deploy agents for existing sweep
+    python sweep.py                      # Print help
+    python sweep.py sweep.yml            # Create sweep + deploy 1 agent + watch
+    python sweep.py sweep.yml --agents 8 # Create sweep + deploy 8 agents + watch
+    python sweep.py --deploy SWEEP_ID    # Deploy agents for existing sweep + watch
 """
 
 import os
@@ -330,12 +330,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
-  python manage_sweep.py sweep.yml              # Create sweep + deploy 1 agent
-  python manage_sweep.py sweep.yml --agents 8   # Create sweep + deploy 8 agents
-  python manage_sweep.py --deploy dnffyu6j      # Deploy agents for existing sweep
+  python sweep.py sweep.yml              # Create sweep + deploy 1 agent
+  python sweep.py sweep.yml --agents 8   # Create sweep + deploy 8 agents
+  python sweep.py --deploy dnffyu6j      # Deploy agents for existing sweep + watch
 
-  python manage_sweep.py --watch                # Watch pods until stable, then auto logs/describe
-  python manage_sweep.py --delete               # Delete all sweep jobs
+  python sweep.py --delete               # Delete all sweep jobs
         """
     )
 
@@ -347,17 +346,11 @@ Examples:
                         help='Deploy agents for existing sweep ID')
     parser.add_argument('--delete', action='store_true',
                         help='Delete all wandb sweep jobs')
-    parser.add_argument('--watch', action='store_true',
-                        help='Watch pods until stable, then show describe (errors) or logs (running)')
 
     args = parser.parse_args()
 
     if args.delete:
         delete_jobs()
-        sys.exit(0)
-
-    if args.watch:
-        watch_pods()
         sys.exit(0)
 
     if not args.sweep_file and not args.deploy:
@@ -393,16 +386,14 @@ Examples:
     print(f"\nDeploying job to Kubernetes...")
     deploy_job(job_file)
 
-    print("DONE")
-
     print(f"\nSweep ID: {sweep_id}")
     print(f"View at: https://wandb.ai/{entity}/{project}/sweeps/{sweep_id}")
 
-    print(f"\nMonitor:")
-    print(f"  python manage_sweep.py --watch     # auto-wait, then logs/describe")
+    print(f"\nWatching pods...")
+    watch_pods()
 
     print(f"\nDelete all jobs:")
-    print(f"  python manage_sweep.py --delete")
+    print(f"  python sweep.py --delete")
 
 
 if __name__ == "__main__":
