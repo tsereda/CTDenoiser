@@ -4,7 +4,17 @@ method: grid
 entity: timgsereda
 project: ctdenoiser-sweep
 
+# Sweep over every model architecture AND every training method exposed by
+# ctdenoiser.train. Parameter keys use hyphens so W&B's ${args} macro emits the
+# exact CLI flags argparse expects (e.g. --training-mode, --n2v-mask-fraction).
+#
+# Two combinations in this grid are special-cased by train.py:
+#   * flowmatching + n2v  -> rejected (flow matching needs paired clean targets);
+#                            that single run fails fast and can be ignored.
+#   * zsn2n (any model)   -> trains a fresh per-image net and ignores --model,
+#                            so the 5 zsn2n runs are equivalent.
 parameters:
+  # Core architectures (used by supervised / n2v; ignored by zsn2n).
   model:
     values:
       - redcnn
@@ -13,8 +23,36 @@ parameters:
       - ctformer
       - flowmatching
 
+  # Training methods / core functions.
+  training-mode:
+    values:
+      - supervised   # clean-target MSE / flow-matching loss
+      - n2v          # Noise2Void blind-spot self-supervision
+      - zsn2n        # Zero-Shot Noise2Noise per-image test-time training
+
   epochs:
     value: 50
+
+  # --- method-specific hyperparameters (used only by the matching mode) ---
+  # Noise2Void blind-spot self-supervision
+  n2v-mask-fraction:
+    value: 0.02
+  n2v-neighbor-radius:
+    value: 2
+
+  # Zero-Shot Noise2Noise per-image optimisation
+  zsn2n-iters:
+    value: 2000
+  zsn2n-channels:
+    value: 48
+  zsn2n-lr:
+    value: 0.001
+
+  # Flow matching ODE sampling steps (flowmatching model only)
+  flow-steps:
+    value: 20
+  flow-steps-eval:
+    value: 5
 
 command:
   - ${env}
