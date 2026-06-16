@@ -30,7 +30,13 @@ try:
 except ImportError:
     _MPL_AVAILABLE = False
 
-from .data.dataset import DICOMCTDataset, HDF5CTDataset, SyntheticCTDataset
+from .data.dataset import (
+    HU_OFFSET,
+    HU_SCALE,
+    DICOMCTDataset,
+    HDF5CTDataset,
+    SyntheticCTDataset,
+)
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
@@ -78,10 +84,12 @@ def build_loaders(args):
             f"({train_p[:3]}... | {val_p})"
         )
         train_ds = DICOMCTDataset(
-            args.dicom_root, train_p, patch_size=args.patch_size, train=True
+            args.dicom_root, train_p, patch_size=args.patch_size, train=True,
+            hu_offset=args.hu_offset, hu_scale=args.hu_scale,
         )
         val_ds = DICOMCTDataset(
-            args.dicom_root, val_p, patch_size=args.patch_size, train=False
+            args.dicom_root, val_p, patch_size=args.patch_size, train=False,
+            hu_offset=args.hu_offset, hu_scale=args.hu_scale,
         )
         train_loader = DataLoader(
             train_ds, batch_size=args.batch_size, shuffle=True,
@@ -259,6 +267,13 @@ def main(argv=None):
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--h5-path", type=str, default=None,
                         help="preprocessed HDF5 file (see scripts/convert_dicom_to_h5.py)")
+    parser.add_argument("--hu-offset", type=float, default=HU_OFFSET,
+                        help="HU window offset for --dicom-root normalisation "
+                             f"(default: {HU_OFFSET}, soft-tissue window). "
+                             "Ignored for --h5-path (baked in at conversion time).")
+    parser.add_argument("--hu-scale", type=float, default=HU_SCALE,
+                        help="HU window scale for --dicom-root normalisation "
+                             f"(default: {HU_SCALE}; window is [-offset, scale-offset]).")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)

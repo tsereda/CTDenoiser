@@ -93,8 +93,11 @@ def main():
         "--output", default="/data/ldct_preprocessed.h5",
         help="output HDF5 path",
     )
-    parser.add_argument("--hu-offset", type=float, default=1000.0)
-    parser.add_argument("--hu-scale", type=float, default=2000.0)
+    # Soft-tissue / abdomen window (level 40 HU, width 400 HU -> [-160, +240]),
+    # the standard AAPM/Mayo LDCT window. A wide window compresses the low/full
+    # dose difference to ~1% of [0, 1] and makes the task near-trivial.
+    parser.add_argument("--hu-offset", type=float, default=160.0)
+    parser.add_argument("--hu-scale", type=float, default=400.0)
     parser.add_argument(
         "--compression", default="gzip",
         help="HDF5 compression filter (default: gzip)",
@@ -139,6 +142,13 @@ def main():
             low_vol = low_vol[:n_slices]
             full_vol = full_vol[:n_slices]
 
+            noise = float(np.mean(np.abs(low_vol.astype(np.float64) - full_vol)))
+            if noise < 1e-4:
+                print(
+                    f"  Warning: {pid} low and full are nearly identical "
+                    f"(mean|low-full|={noise:.2e}); check pairing / HU window."
+                )
+
             grp = f.create_group(f"patients/{pid}")
             chunks = (1, low_vol.shape[1], low_vol.shape[2])
             grp.create_dataset(
@@ -156,7 +166,7 @@ def main():
             print(
                 f"  [{i}/{len(patients)}] {pid}: "
                 f"{n_slices} slices, shape {low_vol.shape[1:]}, "
-                f"{elapsed:.1f}s"
+                f"noise(mean|low-full|)={noise:.4f}, {elapsed:.1f}s"
             )
 
     total = time.time() - t0

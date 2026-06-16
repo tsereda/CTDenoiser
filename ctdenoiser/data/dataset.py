@@ -7,6 +7,38 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+# Default HU window: soft-tissue / abdomen (level 40 HU, width 400 HU ->
+# range [-160, +240]). This is the standard AAPM/Mayo LDCT window. A wide
+# window (e.g. [-1000, +1000]) compresses the low/full dose difference down to
+# ~1% of the [0, 1] range, making the "denoising" task near-trivial and the
+# identity baseline beat every trained model -- see pair_noise_stats below.
+HU_OFFSET = 160.0
+HU_SCALE = 400.0
+
+
+def normalize_hu(vol, hu_offset=HU_OFFSET, hu_scale=HU_SCALE):
+    """Window a HU volume into [0, 1]: clip((vol + offset) / scale)."""
+    return np.clip((vol + hu_offset) / hu_scale, 0.0, 1.0)
+
+
+def pair_noise_stats(pid, low_vol, full_vol):
+    """Report the low/full difference and warn on a likely pairing bug.
+
+    Returns the mean absolute difference (in normalised [0, 1] units), which is
+    the noise the denoiser is asked to remove and the floor the identity
+    baseline scores against. A value near 0 means ``low`` and ``full`` are
+    effectively the same image -- either a duplicated/mis-paired series or a
+    window so wide the dose difference washed out.
+    """
+    diff = float(np.mean(np.abs(low_vol.astype(np.float64) - full_vol)))
+    if diff < 1e-4:
+        print(
+            f"Warning: {pid} low and full are nearly identical "
+            f"(mean|low-full|={diff:.2e}); the denoising task is trivial. "
+            f"Check the low/full pairing and that the HU window is not too wide."
+        )
+    return diff
+
 
 class _PairedCTBase(Dataset):
     """Shared logic for paired low/full-dose CT datasets."""
@@ -57,8 +89,8 @@ class DICOMCTDataset(_PairedCTBase):
         patients,
         patch_size=64,
         train=True,
-        hu_offset=1000.0,
-        hu_scale=2000.0,
+        hu_offset=HU_OFFSET,
+        hu_scale=HU_SCALE,
     ):
         from .dicom import read_series_hu
 
@@ -77,8 +109,9 @@ class DICOMCTDataset(_PairedCTBase):
             low_vol = read_series_hu(str(low_dir)).astype(np.float32)
             full_vol = read_series_hu(str(full_dir)).astype(np.float32)
 
-            low_vol = np.clip((low_vol + hu_offset) / hu_scale, 0.0, 1.0)
-            full_vol = np.clip((full_vol + hu_offset) / hu_scale, 0.0, 1.0)
+            low_vol = normalize_hu(low_vol, hu_offset, hu_scale)
+            full_vol = normalize_hu(full_vol, hu_offset, hu_scale)
+            pair_noise_stats(pid, low_vol, full_vol)
 
             n_slices = min(low_vol.shape[0], full_vol.shape[0])
             if low_vol.shape[0] != full_vol.shape[0]:
@@ -168,6 +201,8 @@ class HDF5CTDataset(_PairedCTBase):
                 grp = f[f"patients/{pid}"]
                 low_vol = grp["low"][:]
                 full_vol = grp["full"][:]
+
+                pair_noise_stats(pid, low_vol, full_vol)
 
                 n_slices = low_vol.shape[0]
                 self.low_volumes[pid] = low_vol
