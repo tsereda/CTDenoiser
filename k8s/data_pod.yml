@@ -60,9 +60,9 @@ spec:
           echo "Running DICOM to HDF5 conversion (anatomy=$ANATOMY)..."
           python scripts/convert_dicom_to_h5.py \
             --dicom-root /data/ldct_dicom \
-            --output /data/ldct_preprocessed.h5 \
+            --output "/data/ldct_${ANATOMY}.h5" \
             --anatomy "$ANATOMY"
-          echo "Conversion complete. HDF5 saved to /data/ldct_preprocessed.h5"
+          echo "Conversion complete. HDF5 saved to /data/ldct_${ANATOMY}.h5"
       volumeMounts:
         - name: workspace
           mountPath: /app
