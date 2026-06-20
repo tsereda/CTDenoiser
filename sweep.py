@@ -3,10 +3,14 @@
 CTDenoiser Training Management - Kubernetes Jobs
 
 Usage:
-    python sweep.py                      # Print help
-    python sweep.py sweep.yml            # Create sweep + deploy 1 agent + watch
-    python sweep.py sweep.yml --agents 8 # Create sweep + deploy 8 agents + watch
-    python sweep.py --deploy SWEEP_ID    # Deploy agents for existing sweep + watch
+    python sweep.py                       # Print help
+    python sweep.py sweep.yml             # Sweep the abdomen cache + 1 agent
+    python sweep.py sweep.yml --agents 8  # Sweep abdomen + 8 agents
+    python sweep.py sweep.yml --anatomy chest --agents 8   # Sweep /data/ldct_chest.h5
+    python sweep.py --deploy SWEEP_ID     # Deploy agents for existing sweep + watch
+
+Each anatomy is downloaded once (data pod -> /data/ldct_<anatomy>.h5) and swept
+separately; merge the exports with scripts/benchmark_report.py for one report.
 """
 
 import os
@@ -63,8 +67,15 @@ def create_sweep(config_path):
 # KUBERNETES INDEXED JOB
 # ============================================================================
 
-def generate_indexed_job(sweep_id, entity, project, num_agents=4):
-    """Generate an Indexed Job YAML from template."""
+def generate_indexed_job(sweep_id, entity, project, num_agents=4,
+                         h5_name='ldct_abdomen.h5'):
+    """Generate an Indexed Job YAML from template.
+
+    ``h5_name`` is the preprocessed cache on the PVC to sweep (the data pod
+    writes one ``ldct_<anatomy>.h5`` per anatomy). Each anatomy is its own
+    sweep over its own cache; the anatomy/window is logged from the file's
+    attrs so the runs stay distinguishable in one W&B project.
+    """
     try:
         with open(TEMPLATE_PATH, 'r') as f:
             job_yaml = yaml.safe_load(f)
@@ -85,9 +96,9 @@ apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/
 pip install wandb matplotlib h5py
 
 # Copy preprocessed HDF5 from PVC to local emptyDir for fast I/O
-echo "Copying preprocessed data..."
+echo "Copying preprocessed data ({h5_name})..."
 t0=$(date +%s)
-cp /data/ldct_preprocessed.h5 /workspace/data.h5
+cp /data/{h5_name} /workspace/data.h5
 echo "Copy done: $(du -h /workspace/data.h5 | cut -f1) in $(($(date +%s) - t0))s"
 
 git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
@@ -330,11 +341,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Examples:
-  python sweep.py sweep.yml              # Create sweep + deploy 1 agent
-  python sweep.py sweep.yml --agents 8   # Create sweep + deploy 8 agents
-  python sweep.py --deploy dnffyu6j      # Deploy agents for existing sweep + watch
+  python sweep.py sweep.yml                     # Sweep abdomen cache + 1 agent
+  python sweep.py sweep.yml --agents 8          # Sweep abdomen + 8 agents
+  python sweep.py sweep.yml --anatomy chest     # Sweep /data/ldct_chest.h5
+  python sweep.py sweep.yml --h5-name ldct_preprocessed.h5   # legacy cache
+  python sweep.py --deploy dnffyu6j             # Deploy agents for existing sweep + watch
 
-  python sweep.py --delete               # Delete all sweep jobs
+  python sweep.py --delete                      # Delete all sweep jobs
         """
     )
 
@@ -342,6 +355,13 @@ Examples:
                         help='Path to sweep configuration file')
     parser.add_argument('--agents', type=int, default=1,
                         help='Number of agents to deploy (default: 1)')
+    parser.add_argument('--anatomy', default='abdomen',
+                        choices=['abdomen', 'chest', 'head'],
+                        help='which per-anatomy cache to sweep: /data/ldct_<anatomy>.h5 '
+                             '(default: abdomen)')
+    parser.add_argument('--h5-name', default=None,
+                        help='explicit PVC cache filename, overriding --anatomy '
+                             '(e.g. ldct_preprocessed.h5 for a legacy cache)')
     parser.add_argument('--deploy', type=str, metavar='SWEEP_ID',
                         help='Deploy agents for existing sweep ID')
     parser.add_argument('--delete', action='store_true',
@@ -376,11 +396,14 @@ Examples:
         project = config.get('project', DEFAULT_PROJECT)
 
     print(f"\nGenerating Indexed Job YAML ({args.agents} agents)...")
+    h5_name = args.h5_name or f"ldct_{args.anatomy}.h5"
+    print(f"Sweeping cache /data/{h5_name}")
     job_file = generate_indexed_job(
         sweep_id=sweep_id,
         entity=entity,
         project=project,
-        num_agents=args.agents
+        num_agents=args.agents,
+        h5_name=h5_name,
     )
 
     print(f"\nDeploying job to Kubernetes...")

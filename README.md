@@ -126,8 +126,33 @@ python -m ctdenoiser.train --model ctformer --dicom-root /data/ldct_dicom \
 `--hu-offset` / `--hu-scale` override the preset for a custom window. Keep one
 anatomy per `--dicom-root` / HDF5 cache so a patient never maps two windows;
 the data layer now **errors** if a patient has two same-dose series rather than
-silently mis-pairing. The download cohort is selected by `BODY_PART` in
-`k8s/data_pod.yml` / `notebooks/00_build_cache.ipynb`.
+silently mis-pairing.
+
+### Per-anatomy benchmark workflow
+
+The data pod downloads one cohort and writes a self-describing cache
+`/data/ldct_<anatomy>.h5` (window baked in, anatomy stored in the file attrs).
+Download each anatomy **once**, then sweep any of them anytime — caches coexist
+on the PVC:
+
+```bash
+# 1. download + cache each anatomy once (BODY_PART/ANATOMY set on the data pod)
+BODY_PART=ABDOMEN ANATOMY=abdomen → ldct_abdomen.h5
+BODY_PART=CHEST   ANATOMY=chest   → ldct_chest.h5
+BODY_PART=HEAD    ANATOMY=head    → ldct_head.h5
+
+# 2. one sweep per anatomy (picks /data/ldct_<anatomy>.h5)
+python sweep.py sweep.yml --anatomy abdomen --agents 8
+python sweep.py sweep.yml --anatomy chest   --agents 8
+python sweep.py sweep.yml --anatomy head    --agents 8
+
+# 3. one merged dashboard across all three (anatomy column carries through)
+python scripts/benchmark_report.py abdomen.csv chest.csv head.csv --out report.html
+```
+
+`--h5-name` targets an explicit cache filename (e.g. a legacy
+`ldct_preprocessed.h5`). All runs can share one W&B project — each carries its
+anatomy/window in the logged config, and `benchmark_report.py` facets by it.
 
 ### Synthetic (smoke test)
 
