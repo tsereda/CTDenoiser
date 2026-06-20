@@ -25,7 +25,7 @@ spec:
           # MAX_PATIENTS caps the cohort (empty = all paired patients, ~50 abdomen).
           export BODY_PART="${BODY_PART:-ABDOMEN}"
           export ANATOMY="${ANATOMY:-abdomen}"
-          export MAX_PATIENTS="${MAX_PATIENTS:-10}"
+          export MAX_PATIENTS="${MAX_PATIENTS:-1000}"
 
           # Download DICOM data from TCIA
           python3 -c "
