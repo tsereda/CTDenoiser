@@ -1,7 +1,6 @@
 """Paired low-dose / full-dose CT datasets."""
 
 import random
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -14,6 +13,29 @@ from torch.utils.data import Dataset
 # identity baseline beat every trained model -- see pair_noise_stats below.
 HU_OFFSET = 160.0
 HU_SCALE = 400.0
+
+# Per-anatomy HU windows as (offset, scale), where the window is
+# [-offset, scale-offset] and offset/scale derive from clinical level/width:
+#   offset = width/2 - level,  scale = width.
+# Lung and brain content sit far outside the abdomen window, so denoising chest
+# or head scans under the default soft-tissue window clips the relevant anatomy
+# to 0/1 and washes the low/full difference out (the pair_noise_stats warning).
+ANATOMY_WINDOWS = {
+    "abdomen": (HU_OFFSET, HU_SCALE),  # soft tissue L40/W400  -> [-160, +240]
+    "chest": (1350.0, 1500.0),         # lung      L-600/W1500 -> [-1350, +150]
+    "head": (0.0, 80.0),               # brain     L40/W80     -> [0, +80]
+}
+
+
+def window_for_anatomy(anatomy):
+    """Return the ``(hu_offset, hu_scale)`` window preset for an anatomy name."""
+    try:
+        return ANATOMY_WINDOWS[anatomy]
+    except KeyError:
+        raise ValueError(
+            f"unknown anatomy {anatomy!r}; choose from "
+            f"{sorted(ANATOMY_WINDOWS)} or pass --hu-offset/--hu-scale."
+        ) from None
 
 
 def normalize_hu(vol, hu_offset=HU_OFFSET, hu_scale=HU_SCALE):
@@ -131,42 +153,9 @@ class DICOMCTDataset(_PairedCTBase):
     @staticmethod
     def _scan_series(root):
         """Scan series dirs and return {patient_id: {low: Path, full: Path}}."""
-        try:
-            import pydicom
-        except ImportError as exc:
-            raise ImportError("pydicom is required: pip install pydicom") from exc
+        from .dicom import scan_paired_series
 
-        root = Path(root)
-        mapping: dict[str, dict[str, Path]] = {}
-        for sdir in sorted(root.iterdir()):
-            if not sdir.is_dir():
-                continue
-            dcm_files = list(sdir.glob("*.dcm"))
-            if not dcm_files:
-                continue
-            hdr = pydicom.dcmread(str(dcm_files[0]), stop_before_pixels=True)
-            pid = str(hdr.PatientID)
-            desc = str(getattr(hdr, "SeriesDescription", "")).lower()
-            if "low dose" in desc:
-                dose = "low"
-            elif "full dose" in desc:
-                dose = "full"
-            else:
-                continue
-            mapping.setdefault(pid, {})
-            mapping[pid][dose] = sdir
-
-        complete = {
-            pid: v
-            for pid, v in mapping.items()
-            if "low" in v and "full" in v
-        }
-        if not complete:
-            raise ValueError(
-                f"No paired low/full dose patients found in {root}. "
-                f"Detected: {mapping}"
-            )
-        return complete
+        return scan_paired_series(root)
 
     @staticmethod
     def list_patients(root):

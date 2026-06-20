@@ -9,76 +9,12 @@ can copy in seconds instead of minutes.
 
 import argparse
 import time
-from pathlib import Path
 
 import h5py
 import numpy as np
 
-
-def read_series_hu(series_dir: str) -> np.ndarray:
-    """Load sorted DICOM slices from a directory and return HU volume."""
-    try:
-        import pydicom
-    except ImportError as exc:
-        raise ImportError("pydicom is required: pip install pydicom") from exc
-
-    dcms = sorted(
-        Path(series_dir).glob("*.dcm"),
-        key=lambda p: float(
-            pydicom.dcmread(str(p), stop_before_pixels=True).ImagePositionPatient[2]
-        ),
-    )
-    if not dcms:
-        raise ValueError(f"No .dcm files in {series_dir}")
-
-    slices = []
-    for p in dcms:
-        ds = pydicom.dcmread(str(p))
-        hu = (
-            ds.pixel_array.astype(np.float32) * float(ds.RescaleSlope)
-            + float(ds.RescaleIntercept)
-        )
-        slices.append(hu)
-    return np.stack(slices, axis=0)
-
-
-def scan_paired_series(root: str) -> dict[str, dict[str, Path]]:
-    """Return {patient_id: {low: Path, full: Path}} for paired DICOM series."""
-    try:
-        import pydicom
-    except ImportError as exc:
-        raise ImportError("pydicom is required: pip install pydicom") from exc
-
-    root_path = Path(root)
-    mapping: dict[str, dict[str, Path]] = {}
-    for sdir in sorted(root_path.iterdir()):
-        if not sdir.is_dir():
-            continue
-        dcm_files = list(sdir.glob("*.dcm"))
-        if not dcm_files:
-            continue
-        hdr = pydicom.dcmread(str(dcm_files[0]), stop_before_pixels=True)
-        pid = str(hdr.PatientID)
-        desc = str(getattr(hdr, "SeriesDescription", "")).lower()
-        if "low dose" in desc:
-            dose = "low"
-        elif "full dose" in desc:
-            dose = "full"
-        else:
-            continue
-        mapping.setdefault(pid, {})
-        mapping[pid][dose] = sdir
-
-    complete = {
-        pid: series
-        for pid, series in mapping.items()
-        if "low" in series and "full" in series
-    }
-    if not complete:
-        raise ValueError(
-            f"No paired low/full dose patients found in {root}. Detected: {mapping}"
-        )
-    return complete
+from ctdenoiser.data.dataset import ANATOMY_WINDOWS, window_for_anatomy
+from ctdenoiser.data.dicom import read_series_hu, scan_paired_series
 
 
 def main():
@@ -93,11 +29,18 @@ def main():
         "--output", default="/data/ldct_preprocessed.h5",
         help="output HDF5 path",
     )
-    # Soft-tissue / abdomen window (level 40 HU, width 400 HU -> [-160, +240]),
-    # the standard AAPM/Mayo LDCT window. A wide window compresses the low/full
-    # dose difference to ~1% of [0, 1] and makes the task near-trivial.
-    parser.add_argument("--hu-offset", type=float, default=160.0)
-    parser.add_argument("--hu-scale", type=float, default=400.0)
+    # The HU window is baked into the cache, so pick it to match the anatomy of
+    # the scans being converted. --anatomy sets a clinical preset; --hu-offset/
+    # --hu-scale override it for a custom window. Default: abdomen soft tissue
+    # (level 40 HU, width 400 HU -> [-160, +240]). A wide window compresses the
+    # low/full dose difference to ~1% of [0, 1] and makes the task near-trivial.
+    parser.add_argument("--anatomy", choices=sorted(ANATOMY_WINDOWS),
+                        default="abdomen",
+                        help="HU window preset (default: abdomen)")
+    parser.add_argument("--hu-offset", type=float, default=None,
+                        help="override the --anatomy window offset")
+    parser.add_argument("--hu-scale", type=float, default=None,
+                        help="override the --anatomy window scale")
     parser.add_argument(
         "--compression", default="gzip",
         help="HDF5 compression filter (default: gzip)",
@@ -108,14 +51,22 @@ def main():
     )
     args = parser.parse_args()
 
+    offset, scale = window_for_anatomy(args.anatomy)
+    if args.hu_offset is not None:
+        offset = args.hu_offset
+    if args.hu_scale is not None:
+        scale = args.hu_scale
+
     mapping = scan_paired_series(args.dicom_root)
     patients = sorted(mapping.keys())
     print(f"Found {len(patients)} paired patients: {patients}")
+    print(f"Window: anatomy={args.anatomy} offset={offset} scale={scale}")
 
     t0 = time.time()
     with h5py.File(args.output, "w") as f:
-        f.attrs["hu_offset"] = args.hu_offset
-        f.attrs["hu_scale"] = args.hu_scale
+        f.attrs["hu_offset"] = offset
+        f.attrs["hu_scale"] = scale
+        f.attrs["anatomy"] = args.anatomy
 
         for i, pid in enumerate(patients, 1):
             t_pat = time.time()
@@ -125,12 +76,8 @@ def main():
             low_vol = read_series_hu(low_dir).astype(np.float32)
             full_vol = read_series_hu(full_dir).astype(np.float32)
 
-            low_vol = np.clip(
-                (low_vol + args.hu_offset) / args.hu_scale, 0.0, 1.0
-            )
-            full_vol = np.clip(
-                (full_vol + args.hu_offset) / args.hu_scale, 0.0, 1.0
-            )
+            low_vol = np.clip((low_vol + offset) / scale, 0.0, 1.0)
+            full_vol = np.clip((full_vol + offset) / scale, 0.0, 1.0)
 
             n_slices = min(low_vol.shape[0], full_vol.shape[0])
             if low_vol.shape[0] != full_vol.shape[0]:
