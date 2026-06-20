@@ -18,21 +18,33 @@ spec:
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
           pip install --no-cache-dir tcia_utils pydicom pandas h5py numpy
 
+          # Which anatomy cohort to pull. BODY_PART selects the TCIA scans;
+          # ANATOMY picks the matching HU window for the HDF5 conversion below.
+          #   ABDOMEN -> abdomen,  CHEST -> chest,  HEAD -> head
+          # MAX_PATIENTS caps the cohort (empty = all paired patients, ~50 abdomen).
+          export BODY_PART="${BODY_PART:-ABDOMEN}"
+          export ANATOMY="${ANATOMY:-abdomen}"
+          export MAX_PATIENTS="${MAX_PATIENTS:-10}"
+
           # Download DICOM data from TCIA
           python3 -c "
           from tcia_utils import nbia
           import pandas as pd, os
 
           DICOM_DIR = '/tmp/ldct_dicom'
-          MAX_PATIENTS = 10
+          BODY_PART = os.environ['BODY_PART']
+          _mp = os.environ.get('MAX_PATIENTS', '').strip()
+          MAX_PATIENTS = int(_mp) if _mp else None
 
           series = nbia.getSeries(collection='LDCT-and-Projection-data')
           df = pd.DataFrame(series)
-          imgs = df[(df['BodyPartExamined']=='ABDOMEN') & df['SeriesDescription'].isin(['Low Dose Images','Full Dose Images'])]
+          imgs = df[(df['BodyPartExamined']==BODY_PART) & df['SeriesDescription'].isin(['Low Dose Images','Full Dose Images'])]
           by_pt = imgs.groupby('PatientID')['SeriesDescription'].apply(set)
-          paired = by_pt[by_pt.apply(lambda x: 'Low Dose Images' in x and 'Full Dose Images' in x)].index.tolist()[:MAX_PATIENTS]
+          paired = by_pt[by_pt.apply(lambda x: 'Low Dose Images' in x and 'Full Dose Images' in x)].index.tolist()
+          if MAX_PATIENTS:
+              paired = paired[:MAX_PATIENTS]
           sub = imgs[imgs['PatientID'].isin(paired)]
-          print(f'Downloading {len(sub)} series for {len(paired)} patients...')
+          print(f'Downloading {len(sub)} series for {len(paired)} {BODY_PART} patients...')
           os.makedirs(DICOM_DIR, exist_ok=True)
           nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=DICOM_DIR, input_type='list')
           print('Done. Data saved to /tmp/ldct_dicom/')
@@ -45,10 +57,11 @@ spec:
           git clone https://github.com/tsereda/ctdenoiser.git /app/ctdenoiser
           cd /app/ctdenoiser
 
-          echo "Running DICOM to HDF5 conversion..."
+          echo "Running DICOM to HDF5 conversion (anatomy=$ANATOMY)..."
           python scripts/convert_dicom_to_h5.py \
             --dicom-root /data/ldct_dicom \
-            --output /data/ldct_preprocessed.h5
+            --output /data/ldct_preprocessed.h5 \
+            --anatomy "$ANATOMY"
           echo "Conversion complete. HDF5 saved to /data/ldct_preprocessed.h5"
       volumeMounts:
         - name: workspace

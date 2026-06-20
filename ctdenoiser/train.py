@@ -11,6 +11,8 @@ Examples
 """
 
 import argparse
+import subprocess
+import time
 from pathlib import Path
 
 import torch
@@ -31,11 +33,11 @@ except ImportError:
     _MPL_AVAILABLE = False
 
 from .data.dataset import (
-    HU_OFFSET,
-    HU_SCALE,
+    ANATOMY_WINDOWS,
     DICOMCTDataset,
     HDF5CTDataset,
     SyntheticCTDataset,
+    window_for_anatomy,
 )
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
@@ -52,9 +54,78 @@ MODELS = {
 }
 
 
+def model_stats(model):
+    """Parameter count and on-disk size of a model.
+
+    The efficiency axis of the benchmark: a denoiser is only useful if its
+    quality justifies its size / compute, so every run logs these alongside the
+    image-quality metrics.
+    """
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # 4 bytes/param (float32) -> MB; matches a saved state_dict closely enough.
+    return {
+        "param_count": total,
+        "trainable_params": trainable,
+        "model_size_mb": total * 4 / 1e6,
+    }
+
+
+def _git_sha():
+    """Short git commit of the working tree, or None outside a repo."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).resolve().parent,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def provenance(args, device):
+    """Reproducibility metadata: code version, environment, resolved window."""
+    info = {
+        "git_sha": _git_sha(),
+        "torch_version": torch.__version__,
+        "device": str(device),
+        "anatomy": getattr(args, "anatomy", None),
+        "hu_offset": getattr(args, "hu_offset", None),
+        "hu_scale": getattr(args, "hu_scale", None),
+    }
+    if device.type == "cuda":
+        info["gpu_name"] = torch.cuda.get_device_name(device)
+    return info
+
+
+def dataset_provenance(train_loader, val_loader, full_slice):
+    """Sizes and the exact val patient IDs, so a run's split is reproducible."""
+    info = {
+        "n_train_slices": len(train_loader.dataset),
+        "n_val_slices": len(val_loader.dataset),
+    }
+    if full_slice:
+        val_pids = sorted(getattr(val_loader.dataset, "low_volumes", {}).keys())
+        train_pids = getattr(train_loader.dataset, "low_volumes", {})
+        info["n_train_patients"] = len(train_pids)
+        info["n_val_patients"] = len(val_pids)
+        info["val_patient_ids"] = ",".join(val_pids)
+    return info
+
+
 def build_loaders(args):
     """Return (train_loader, val_loader, full_slice_eval)."""
     if getattr(args, "h5_path", None):
+        # The window is baked into the cache; reflect its real anatomy/window in
+        # the logged provenance rather than the (ignored) --anatomy default.
+        try:
+            import h5py
+            with h5py.File(args.h5_path, "r") as f:
+                args.anatomy = str(f.attrs.get("anatomy", args.anatomy))
+                args.hu_offset = float(f.attrs.get("hu_offset", args.hu_offset))
+                args.hu_scale = float(f.attrs.get("hu_scale", args.hu_scale))
+        except (OSError, KeyError):
+            pass
         train_p, val_p = HDF5CTDataset.split_patients(
             args.h5_path, val_fraction=args.val_fraction, seed=args.seed
         )
@@ -109,33 +180,59 @@ def build_loaders(args):
     return loader, loader, False
 
 
+_METRIC_FNS = {"psnr": psnr, "ssim": ssim, "rmse": rmse, "gmsd": gmsd, "nps_ratio": nps_ratio}
+
+
 @torch.no_grad()
 def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
+    """Mean + std of each metric plus inference latency / peak memory.
+
+    Returns mean ``{metric}`` and spread ``{metric}_std`` (error bars across
+    eval samples), and timing: ``latency_ms`` (per slice) and ``peak_mem_mb``
+    (CUDA only). Latency is wall-clock around the forward path only, so it is
+    the deployable inference cost, independent of dataset size.
+    """
+    import numpy as np
     model.eval()
     _orig_steps = getattr(model, "num_steps", None)
     if _orig_steps is not None and eval_steps is not None:
         model.num_steps = eval_steps
 
-    n, p, s, r, g, nps = 0, 0.0, 0.0, 0.0, 0.0, 0.0
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    per_sample = {k: [] for k in _METRIC_FNS}
+    infer_s, n = 0.0, 0
     for low, full in loader:
         low, full = low.to(device), full.to(device)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        t0 = time.perf_counter()
         if full_slice:
             pred = overlapped_inference(
                 model, low, patch_size=patch_size, margin=patch_size // 4
             ).clamp(0.0, 1.0)
         else:
             pred = model(low).clamp(0.0, 1.0)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        infer_s += time.perf_counter() - t0
         bs = low.size(0)
-        p += psnr(pred, full) * bs
-        s += ssim(pred, full) * bs
-        r += rmse(pred, full) * bs
-        g += gmsd(pred, full) * bs
-        nps += nps_ratio(pred, full) * bs
+        for k, fn in _METRIC_FNS.items():
+            per_sample[k].append(fn(pred, full))
         n += bs
 
     if _orig_steps is not None:
         model.num_steps = _orig_steps
-    return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
+
+    out = {}
+    for k, vals in per_sample.items():
+        arr = np.asarray(vals, dtype=np.float64)
+        out[k] = float(arr.mean())
+        out[f"{k}_std"] = float(arr.std())
+    out["latency_ms"] = 1000.0 * infer_s / max(n, 1)
+    if device.type == "cuda":
+        out["peak_mem_mb"] = torch.cuda.max_memory_allocated(device) / 1e6
+    return out
 
 
 @torch.no_grad()
@@ -267,13 +364,16 @@ def main(argv=None):
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--h5-path", type=str, default=None,
                         help="preprocessed HDF5 file (see scripts/convert_dicom_to_h5.py)")
-    parser.add_argument("--hu-offset", type=float, default=HU_OFFSET,
-                        help="HU window offset for --dicom-root normalisation "
-                             f"(default: {HU_OFFSET}, soft-tissue window). "
-                             "Ignored for --h5-path (baked in at conversion time).")
-    parser.add_argument("--hu-scale", type=float, default=HU_SCALE,
-                        help="HU window scale for --dicom-root normalisation "
-                             f"(default: {HU_SCALE}; window is [-offset, scale-offset]).")
+    parser.add_argument("--anatomy", choices=sorted(ANATOMY_WINDOWS),
+                        default="abdomen",
+                        help="HU window preset for --dicom-root normalisation: "
+                             "abdomen (soft tissue), chest (lung), or head (brain). "
+                             "Ignored for --h5-path (window baked in at conversion).")
+    parser.add_argument("--hu-offset", type=float, default=None,
+                        help="override the --anatomy window offset (HU). "
+                             "Window is [-offset, scale-offset].")
+    parser.add_argument("--hu-scale", type=float, default=None,
+                        help="override the --anatomy window scale (HU width).")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)
@@ -303,6 +403,13 @@ def main(argv=None):
             "--training-mode n2v. Use --training-mode supervised."
         )
 
+    # Resolve the HU window: --anatomy preset, with explicit --hu-offset/--hu-scale
+    # taking precedence. Stored back onto args so build_loaders / provenance see
+    # the concrete numbers (and they land in the W&B config).
+    _offset, _scale = window_for_anatomy(args.anatomy)
+    args.hu_offset = _offset if args.hu_offset is None else args.hu_offset
+    args.hu_scale = _scale if args.hu_scale is None else args.hu_scale
+
     device = torch.device(
         args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     )
@@ -310,6 +417,17 @@ def main(argv=None):
     model_str = "per-image-net" if args.training_mode == "zsn2n" else args.model
     print(f"device={device}  model={model_str}  mode={args.training_mode}")
     train_loader, val_loader, full_slice = build_loaders(args)
+
+    prov = provenance(args, device)
+    ds_prov = dataset_provenance(train_loader, val_loader, full_slice)
+    print(
+        f"window: anatomy={prov['anatomy']} "
+        f"hu=[{-args.hu_offset:.0f}, {args.hu_scale - args.hu_offset:.0f}]  "
+        f"data: {ds_prov.get('n_train_patients', '?')} train / "
+        f"{ds_prov.get('n_val_patients', '?')} val patients, "
+        f"{ds_prov['n_train_slices']}/{ds_prov['n_val_slices']} slices  "
+        f"git={prov['git_sha']}"
+    )
 
     _wb = None
     if args.wandb_project:
@@ -319,6 +437,7 @@ def main(argv=None):
                 config=vars(args),
                 resume="allow",
             )
+            _wb.config.update({**prov, **ds_prov}, allow_val_change=True)
         else:
             print("wandb not installed; skipping W&B logging.")
 
@@ -352,6 +471,14 @@ def main(argv=None):
         model = FlowMatching(num_steps=args.flow_steps).to(device)
     else:
         model = MODELS[args.model]().to(device)
+
+    stats = model_stats(model)
+    print(
+        f"model={args.model}  params={stats['param_count']:,}  "
+        f"size={stats['model_size_mb']:.2f} MB"
+    )
+    if _wb:
+        _wb.config.update(stats, allow_val_change=True)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = torch.nn.MSELoss()
@@ -399,10 +526,14 @@ def main(argv=None):
     print(
         f"eval  psnr={metrics['psnr']:.3f}  ssim={metrics['ssim']:.4f}  "
         f"rmse={metrics['rmse']:.5f}  gmsd={metrics['gmsd']:.5f}  "
-        f"nps_ratio={metrics['nps_ratio']:.5f}"
+        f"nps_ratio={metrics['nps_ratio']:.5f}  "
+        f"params={stats['param_count']:,}  latency={metrics['latency_ms']:.1f} ms"
     )
 
     if _wb:
+        # Headline summary: how far the trained model beats the do-nothing floor.
+        _wb.summary["val/psnr_gain"] = metrics["psnr"] - baseline["psnr"]
+        _wb.summary["val/ssim_gain"] = metrics["ssim"] - baseline["ssim"]
         _wb.finish()
 
     ckpt_dir = Path(args.checkpoint_dir)

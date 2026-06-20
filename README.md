@@ -101,10 +101,61 @@ ldct_dicom/
 - Split is **by patient** (`--val-fraction`, `--seed`) to prevent leakage.
 - Training uses random `--patch-size` crops.
 - Validation runs **full-slice overlapped inference** (margin = patch/4)
-  and reports PSNR / SSIM / RMSE / GMSD / NPS-ratio.
-- HU → `[0,1]` via `clamp((hu + 1000) / 2000, 0, 1)`.
+  and reports PSNR / SSIM / RMSE / GMSD / NPS-ratio (mean ± per-slice std),
+  plus inference latency, peak GPU memory, parameter count, and Δ over the
+  identity baseline.
+- HU → `[0,1]` via a per-anatomy window (below).
+
+### Per-anatomy HU windows
+
+The `LDCT-and-Projection-data` collection spans abdomen, chest, and head scans,
+and each needs its own window — chest lung tissue (~-800 HU) clips to black
+under the abdomen soft-tissue window. Pick the window with `--anatomy`:
+
+```bash
+python -m ctdenoiser.train --model ctformer --dicom-root /data/ldct_dicom \
+    --anatomy chest     # abdomen (default) | chest | head
+```
+
+| `--anatomy` | clinical window | `[low, high]` HU |
+|-------------|-----------------|------------------|
+| `abdomen`   | soft tissue (L40/W400)  | `[-160, +240]` |
+| `chest`     | lung (L-600/W1500)      | `[-1350, +150]` |
+| `head`      | brain (L40/W80)         | `[0, +80]` |
+
+`--hu-offset` / `--hu-scale` override the preset for a custom window. Keep one
+anatomy per `--dicom-root` / HDF5 cache so a patient never maps two windows;
+the data layer now **errors** if a patient has two same-dose series rather than
+silently mis-pairing. The download cohort is selected by `BODY_PART` in
+`k8s/data_pod.yml` / `notebooks/00_build_cache.ipynb`.
 
 ### Synthetic (smoke test)
 
 Without `--dicom-root`, a synthetic noisy/clean dataset is generated so the
 pipeline runs end to end.
+
+## Benchmark report
+
+Pass `--wandb-project` to log per-epoch metrics, sample image panels, parameter
+count / model size, inference latency, peak GPU memory, dataset provenance (the
+exact val patient IDs, anatomy, HU window), and git/torch versions to W&B.
+
+Instead of clicking through the W&B UI, build a **self-contained HTML
+dashboard** — a sortable leaderboard, PSNR-vs-params and PSNR-vs-latency Pareto
+frontiers, a per-anatomy breakdown, and an optional sample gallery — all in one
+file you open in a browser:
+
+```bash
+# from a W&B CSV export
+python scripts/benchmark_report.py export.csv --out report.html
+
+# straight from the W&B API (no manual export)
+python scripts/benchmark_report.py --wandb timgsereda/ctdenoiser-sweep
+python scripts/benchmark_report.py --wandb timgsereda/ctdenoiser-sweep/sweeps/ID
+
+# embed denoised sample panels alongside the tables
+python scripts/benchmark_report.py export.csv --images figures/samples
+```
+
+`scripts/analyze_sweep.py` and `scripts/sweep_report.py` still produce the
+static publication figures / LaTeX table and the by-training-mode summary.
