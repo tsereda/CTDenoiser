@@ -36,21 +36,29 @@
 % -----------------------------------------------------------------------
 \begin{abstract}
 Low-dose computed tomography (LDCT) denoising is a clinically important
-problem in which reducing X-ray exposure introduces structured noise that
-degrades diagnostic quality.  We present \textbf{CTDenoiser}, an open
-benchmark that trains and evaluates five architectures under a unified
-framework: RED-CNN (convolutional residual baseline), DnCNN (flat
-residual CNN with batch normalisation), CTformer (Token2Token Dilation
-transformer), U-Net (encoder-decoder baseline), and a novel Conditional
-Flow Matching model (CFM) that frames denoising as an ordinary
-differential equation transport from the noisy to the clean image
-distribution.  Beyond the standard PSNR, SSIM, and RMSE metrics, we
-introduce two additional measures suited to evaluating generative
-denoisers: Gradient Magnitude Similarity Deviation (GMSD) as a
-perceptual proxy and a Noise Power Spectrum ratio (NPS-ratio) that
-captures spurious high-frequency texture---the primary failure mode of
-generative models on CT.  All code, model definitions, and data-loading
-utilities are released at
+problem in which reducing X-ray exposure introduces structured, spatially
+correlated noise that degrades diagnostic quality.  We present
+\textbf{CTDenoiser}, an open benchmark that evaluates five architectures---RED-CNN
+(convolutional residual baseline), DnCNN (flat residual CNN with batch
+normalisation), CTformer (Token2Token Dilation transformer), U-Net
+(encoder-decoder baseline), and a Conditional Flow Matching model (CFM)
+that frames denoising as an ordinary differential equation transport from
+the noisy to the clean image distribution---across three supervision
+regimes under a single data, training, and inference harness: fully
+\emph{supervised} training with paired full-dose targets,
+\emph{Noise2Void} blind-spot self-supervision, and \emph{Zero-Shot
+Noise2Noise} (ZS-N2N) per-image test-time optimisation.  Beyond the
+standard PSNR, SSIM, and RMSE metrics, we report Gradient Magnitude
+Similarity Deviation (GMSD) as a perceptual proxy and a Noise Power
+Spectrum ratio (NPS-ratio) that captures spurious high-frequency
+texture---the primary failure mode of generative models on CT.  We
+report preliminary full-dataset results on the TCIA LDCT benchmark: as of
+this draft, none of the trained denoisers yet surpasses the unprocessed
+LDCT input on reference-based pixel-fidelity metrics, with ZS-N2N
+remaining closest to the input and supervised CNN regressors achieving the
+strongest SSIM among trained models---pointing to correlated-noise-aware
+self-supervision as a key direction for CT.  All code, model definitions,
+and data-loading utilities are released at
 \href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
 \end{abstract}
 
@@ -82,7 +90,9 @@ with CTDenoiser, a self-contained benchmark that:
 
 \begin{itemize}
   \item provides a single training loop and evaluation harness usable
-        without modification for all five included architectures;
+        without modification for all five included architectures and three
+        supervision regimes (supervised, blind-spot self-supervised, and
+        zero-shot);
   \item enforces patient-level train/validation splits to prevent slice
         leakage;
   \item evaluates on full CT slices via overlapped tiling rather than
@@ -118,6 +128,28 @@ function evaluations (NFEs).  Conditional flow matching~\cite{lipman2022flow,
 albergo2022building} reduces this to as few as 10--50 NFEs by learning
 straight-line probability paths between source and target distributions,
 making it practical for clinical deployment.
+
+\paragraph{Self-supervised and zero-shot denoisers.}
+When paired full-dose targets are unavailable, denoisers can be trained
+from noisy data alone.  Noise2Noise~\cite{lehtinen2018noise2noise} showed
+that mapping between two independent noisy observations of the same scene
+recovers the clean signal in expectation.  Noise2Void~\cite{krull2019noise2void}
+removes the need for a second observation via a blind-spot scheme that
+withholds each target pixel from the network's receptive field, but it
+assumes pixel-wise \emph{independent} noise---an assumption violated by CT,
+whose reconstruction noise is spatially correlated.  Two lines of work
+address this directly: Noise2Sim~\cite{niu2020noise2sim} learns to map
+between the centre pixels of self-similar non-local patches, suppressing
+correlated as well as independent noise and remaining asymptotically
+equivalent to supervised learning; and Zero-Shot Noise2Noise
+(ZS-N2N)~\cite{mansour2023zsn2n} trains a tiny network per image from a
+downsampled Noise2Noise pair, requiring no external data, no noise model,
+and no pretraining.  More recently, Filter2Noise~\cite{sun2025filter2noise}
+couples self-supervised single-image training with an interpretable
+attention-guided bilateral filter designed specifically for LDCT.  Our
+benchmark includes Noise2Void and ZS-N2N as representative blind-spot and
+zero-shot baselines, and we position Noise2Sim and Filter2Noise as the
+natural correlated-noise-aware extensions that our results motivate.
 
 \paragraph{Evaluation metrics.}
 PSNR and SSIM are ubiquitous but favour pixel-level fidelity, potentially
@@ -270,6 +302,23 @@ beyond random patch extraction.  The best checkpoint (by validation PSNR)
 is saved to \texttt{checkpoints/<model>.pt}.  Optional Weights \& Biases
 logging records per-epoch train loss and all validation metrics.
 
+\paragraph{Supervision regimes.}
+Each architecture is trained under up to three regimes.  \emph{Supervised}
+training uses paired full-dose targets with the MSE loss
+(Eq.~\eqref{eq:mse}); the CFM model uses the flow-matching loss
+(Eq.~\eqref{eq:cfm-loss}).  \emph{Noise2Void} (N2V)~\cite{krull2019noise2void}
+trains the same architectures from noisy LDCT images alone: a fraction
+$\rho=0.02$ of pixels per patch are replaced by a random neighbour within
+radius $r=2$, and the loss is the MSE between the prediction and the
+\emph{original} noisy value computed only at these blind-spot locations.
+\emph{Zero-Shot Noise2Noise} (ZS-N2N)~\cite{mansour2023zsn2n} is
+architecture-agnostic: for each image a fresh three-layer residual network
+(width 48, $21.3\mathrm{K}$ parameters) is optimised for 2000 Adam
+iterations on a diagonally-downsampled Noise2Noise pair under a combined
+residual and consistency objective, then discarded.  Because CFM requires
+paired clean targets to define its transport, the CFM\,+\,N2V combination
+is undefined and is omitted.
+
 \subsection{Inference}
 \label{sec:inference}
 
@@ -338,73 +387,98 @@ miss.
 
 Experiments are conducted on the TCIA LDCT-and-Projection-Data
 dataset~\cite{moen2021low}.  We use 80\% of patients for training and
-20\% for validation (patient-level split, seed 0).  All models are
-trained for 50 epochs with patch size 64, batch size 16, and Adam at
-$10^{-4}$.  The CFM model uses $K=20$ Euler steps at inference.
-Validation metrics are computed over full slices using overlapped
-inference with margin $P/4 = 16$.
+20\% for validation (patient-level split, seed 0).  Trained models run for
+50 epochs with patch size 64, batch size 4, and Adam at $10^{-4}$; the CFM
+model integrates the ODE with $K=20$ Euler steps during training and 5 at
+evaluation.  ZS-N2N optimises one network per validation image for 2000
+iterations.  This yields ten distinct configurations: five architectures
+under supervised training, four under N2V (CFM excluded), and the single
+model-agnostic ZS-N2N denoiser.  Validation metrics are computed over full
+slices using overlapped inference with margin $P/4 = 16$.
 
 \subsection{Results}
 
 \begin{table*}[t]
   \centering
-  \caption{Validation results on the TCIA LDCT benchmark.
-           $\uparrow$: higher is better; $\downarrow$: lower is better.
-           Results are mean over the validation patient set.
-           \textbf{Bold}: best per metric.}
+  \caption{Validation results on the TCIA LDCT-and-Projection-Data
+           benchmark (patient-level 80/20 split, seed 0; trained models at
+           50 epochs).  Metrics are means over the validation set computed
+           on full slices via overlapped tiling.  $\uparrow$/$\downarrow$:
+           higher/lower is better.  The \emph{LDCT input} row is the noisy
+           scan with no denoising.  \textbf{Bold}: best denoiser per metric.
+           ZS-N2N values are mean\,$\pm$\,std over its five model-agnostic
+           runs; all other rows are single runs (seed 0).}
   \label{tab:results}
-  \begin{tabular}{lcccccc}
+  \begin{tabular}{llrccccc}
     \toprule
-    \textbf{Model} & \textbf{Type} &
-    \textbf{PSNR\,$\uparrow$} & \textbf{SSIM\,$\uparrow$} &
-    \textbf{RMSE\,$\downarrow$} & \textbf{GMSD\,$\downarrow$} &
-    \textbf{NPS-ratio\,$\downarrow$} \\
+    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
+    PSNR\,$\uparrow$ & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
     \midrule
-    RED-CNN~\cite{chen2017lowdose} & CNN regressor    & -- & -- & -- & -- & -- \\
-    DnCNN~\cite{zhang2017beyond}   & CNN regressor    & -- & -- & -- & -- & -- \\
-    U-Net                          & CNN regressor    & -- & -- & -- & -- & -- \\
-    CTformer~\cite{wang2022ctformer} & Transformer    & -- & -- & -- & -- & -- \\
-    CFM (ours)                     & Generative (ODE) & -- & -- & -- & -- & -- \\
+    LDCT input & --- (no denoising) & --- & 30.03 & 0.883 & 0.0331 & 0.171 & 0.0122 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & 27.93 & \textbf{0.913} & 0.0413 & 0.204 & 0.0195 \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 27.88 & 0.908 & 0.0416 & 0.209 & 0.0197 \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 27.82 & 0.905 & 0.0418 & 0.226 & 0.0198 \\
+    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 27.48 & 0.850 & 0.0434 & 0.296 & 0.0212 \\
+    CFM (ours)                       & Supervised & $2.11\mathrm{M}$ & 27.38 & 0.887 & 0.0440 & 0.245 & 0.0219 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & N2V & $1.85\mathrm{M}$ & 26.63 & 0.875 & 0.0478 & \textbf{0.201} & 0.0255 \\
+    DnCNN~\cite{zhang2017beyond}     & N2V & $0.56\mathrm{M}$ & 26.51 & 0.870 & 0.0485 & 0.232 & 0.0262 \\
+    U-Net                            & N2V & $1.95\mathrm{M}$ & 26.67 & 0.875 & 0.0475 & 0.211 & 0.0251 \\
+    CTformer~\cite{wang2022ctformer} & N2V & $0.40\mathrm{M}$ & 26.15 & 0.857 & 0.0503 & 0.298 & 0.0280 \\
+    CFM                              & N2V & --- & \multicolumn{5}{c}{\textit{undefined (requires paired targets)}} \\
+    \midrule
+    ZS-N2N~\cite{mansour2023zsn2n}   & Zero-shot & $21.3\mathrm{K}$ &
+      \textbf{29.92}{\scriptsize\,$\pm0.001$} & 0.882{\scriptsize\,$\pm0.0005$} &
+      \textbf{0.0331} & \textbf{0.188}{\scriptsize\,$\pm0.0001$} & \textbf{0.0121} \\
     \bottomrule
   \end{tabular}
   \smallskip\\
-  \footnotesize{Full experiments in progress; preliminary 1-epoch
-  synthetic-data figures are provided in Table~\ref{tab:preliminary}.}
+  \footnotesize{Std for the trained (supervised/N2V) configurations is not
+  yet available: each is a single run at seed 0 and the W\&B export records
+  validation-set means only.  Per-patient and multi-seed standard
+  deviations will be added once per-slice metrics are exported.}
 \end{table*}
 
-\begin{table}[h]
-  \centering
-  \caption{Preliminary results: 1 epoch, synthetic data (smoke run).
-           Not comparable to Table~\ref{tab:results}; included to
-           confirm end-to-end pipeline correctness.}
-  \label{tab:preliminary}
-  \begin{tabular}{lcccc}
-    \toprule
-    \textbf{Model} &
-    \textbf{PSNR} & \textbf{SSIM} & \textbf{GMSD} & \textbf{NPS-r.} \\
-    \midrule
-    RED-CNN   & 19.60 & 0.940 & 0.114 & 0.033 \\
-    DnCNN     & 19.67 & 0.946 & 0.108 & 0.032 \\
-    U-Net     &  4.78 & 0.000 & 0.006 & 1.000 \\
-    CTformer  &  8.77 & 0.065 & 0.296 & 0.399 \\
-    CFM       & 18.99 & 0.935 & 0.115 & 0.038 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+Table~\ref{tab:results} reports our results to date.  The most salient
+observation is that, at the current 50-epoch budget, none of the trained
+denoisers surpasses the unprocessed LDCT input on the reference-based
+pixel-fidelity metrics: the input scores $30.03$\,dB PSNR / $0.883$ SSIM,
+whereas the best supervised model (RED-CNN) reaches $27.93$\,dB / $0.913$.
+Supervised training improves SSIM over the input ($0.913$ vs.\ $0.883$ for
+RED-CNN) while lowering PSNR, indicating that the networks alter noise
+texture in ways that improve structural agreement but increase per-pixel
+error---consistent with the LDCT input already being relatively close to
+the full-dose reference under our HU normalisation.
 
-Even from a single synthetic-data epoch (Table~\ref{tab:preliminary}),
-several observations are notable.  RED-CNN and DnCNN converge quickly
-to reasonable PSNR values because MSE regression on trivial synthetic
-data is essentially solved in one pass.  CTformer and U-Net, which have
-more complex inductive structures and require more epochs to
-initialise, underperform after one epoch---this is expected.  The CFM
-model is competitive with the CNN regressors in PSNR and SSIM despite
-using a generative objective, demonstrating that the rectified-flow
-training does not impose a cost at very low epoch counts.  The
-slightly higher NPS-ratio for CFM (0.038 vs.\ 0.032--0.033 for CNN
-regressors) is consistent with generative models introducing marginal
-additional high-frequency residual energy; we expect this gap to widen
-with full training, which will be the key finding of Table~\ref{tab:results}.
+Among architectures, the CNN regressors (RED-CNN, DnCNN, U-Net) cluster
+tightly ($27.8$--$27.9$\,dB, SSIM $0.905$--$0.913$) and outperform the
+transformer (CTformer, $27.48$\,dB / $0.850$) and the generative CFM model
+($27.38$\,dB / $0.887$) under supervision.  CFM attains higher SSIM than
+CTformer despite its generative objective, but its NPS-ratio ($0.0219$) is
+the highest of the supervised models, matching the expectation that
+generative denoisers inject marginally more high-frequency residual energy.
+
+The self-supervised regimes behave as the correlated-noise analysis
+predicts.  Noise2Void degrades every architecture relative to supervised
+training (best $26.67$\,dB) and raises NPS-ratio across the board
+($0.025$--$0.028$ vs.\ $0.019$--$0.022$ supervised); because CT noise
+violates the blind-spot independence assumption, N2V cannot cleanly
+separate signal from correlated noise.  ZS-N2N posts the highest PSNR
+($29.92$\,dB) and lowest GMSD/NPS-ratio of any denoiser, but this reflects
+that its per-image optimisation produces a near-identity, lightly smoothed
+output that stays close to the already-reasonable input rather than
+performing aggressive denoising; its five model-agnostic runs are
+essentially deterministic ($\sigma_\text{PSNR}=0.001$).
+
+Taken together, these preliminary results motivate two next steps: (i)
+longer training with learning-rate scheduling for the trained models, which
+have not yet converged to beat the input; and (ii) incorporating
+correlated-noise-aware self-supervision (Noise2Sim, Filter2Noise) as
+stronger label-free baselines than N2V for CT.  We regard surpassing the
+LDCT input on PSNR/SSIM while controlling NPS-ratio as the key open target
+for the full benchmark.
 
 \subsection{Ablation: Architecture vs.\ Objective}
 
@@ -413,9 +487,15 @@ A key design choice in our benchmark is the inclusion of both U-Net
 (encoder-decoder with skip connections) but different training
 objectives.  This enables a clean ablation: any performance difference
 between the two models can be attributed to the training objective rather
-than the architecture.  We expect CFM to show lower PSNR/SSIM but lower
-GMSD, confirming the widely observed trade-off between pixel fidelity
-and perceptual quality in generative image restoration.
+than the architecture.  At the current 50-epoch budget, U-Net (MSE)
+outperforms CFM (flow matching) on \emph{every} metric---PSNR $27.82$ vs.\
+$27.38$, SSIM $0.905$ vs.\ $0.887$, GMSD $0.226$ vs.\ $0.245$, and
+NPS-ratio $0.0198$ vs.\ $0.0219$.  The anticipated generative trade-off
+(lower pixel fidelity but lower GMSD) does not yet appear; CFM trails on
+both fidelity and perceptual metrics, suggesting the rectified-flow
+objective needs more training or a larger velocity network to realise its
+perceptual advantage.  This null result to date is itself a useful
+benchmark data point.
 
 % -----------------------------------------------------------------------
 \section{Discussion}
@@ -440,12 +520,18 @@ characterisation of residual noise.  We recommend that future work on CT
 denoising report all five metrics in Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
-Our current implementation uses simple Euler integration for the CFM ODE.
-Higher-order solvers (Heun, RK4) would improve accuracy at a given NFE
-budget.  Additionally, the velocity network is a comparatively small
-architecture; scaling to a full-resolution attention-based U-Net may
-improve results but at significant memory cost.  We leave these
-extensions to future work.
+The results in Table~\ref{tab:results} are preliminary: trained models are
+single runs at one seed and 50 epochs, none has yet converged to beat the
+LDCT input, and per-patient/multi-seed standard deviations remain to be
+reported (we currently log only run-to-run variance for the model-agnostic
+ZS-N2N runs).  On the modelling side, our CFM implementation uses simple
+Euler integration; higher-order solvers (Heun, RK4) would improve accuracy
+at a given NFE budget, and the velocity network is comparatively small---scaling
+to a full-resolution attention-based U-Net may improve results at
+significant memory cost.  Finally, our self-supervised coverage is limited
+to Noise2Void and ZS-N2N; adding correlated-noise-aware methods
+(Noise2Sim, Filter2Noise) is the most promising direction for a stronger
+label-free baseline on CT.  We leave these extensions to future work.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
@@ -523,6 +609,39 @@ X.~Liu, C.~Gong, and Q.~Liu.
 \newblock Flow straight and fast: Learning to generate and transfer data with
   rectified flow.
 \newblock In \emph{International Conference on Learning Representations}, 2023.
+
+\bibitem{lehtinen2018noise2noise}
+J.~Lehtinen, J.~Munkberg, J.~Hasselgren, S.~Laine, T.~Karras, M.~Aittala,
+  and T.~Aila.
+\newblock {Noise2Noise}: Learning image restoration without clean data.
+\newblock In \emph{International Conference on Machine Learning}, 2018.
+
+\bibitem{krull2019noise2void}
+A.~Krull, T.-O. Buchholz, and F.~Jug.
+\newblock {Noise2Void}---learning denoising from single noisy images.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2019.
+
+\bibitem{niu2020noise2sim}
+C.~Niu and G.~Wang.
+\newblock {Noise2Sim}---similarity-based self-learning for image denoising.
+\newblock \emph{arXiv preprint arXiv:2011.03384}, 2020.
+\newblock Published as ``Noise suppression with similarity-based
+  self-supervised deep learning,'' \emph{IEEE Transactions on Medical Imaging},
+  2023.
+
+\bibitem{mansour2023zsn2n}
+Y.~Mansour and R.~Heckel.
+\newblock Zero-shot {Noise2Noise}: Efficient image denoising without any data.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2023.
+
+\bibitem{sun2025filter2noise}
+Y.~Sun, L.-S. Schneider, M.~Gu, S.~Mei, C.~Ye, F.~Wagner, S.~Bayer, and
+  A.~Maier.
+\newblock {Filter2Noise}: Interpretable self-supervised single-image denoising
+  for low-dose {CT} with attention-guided bilateral filtering.
+\newblock \emph{arXiv preprint arXiv:2504.13519}, 2025.
 
 \bibitem{wang2004image}
 Z.~Wang, A.~C. Bovik, H.~R. Sheikh, and E.~P. Simoncelli.
