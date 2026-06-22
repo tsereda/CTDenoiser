@@ -183,6 +183,23 @@ def build_loaders(args):
 _METRIC_FNS = {"psnr": psnr, "ssim": ssim, "rmse": rmse, "gmsd": gmsd, "nps_ratio": nps_ratio}
 
 
+def _summarize(per_sample):
+    """Mean and per-sample std for each metric in ``per_sample``.
+
+    ``per_sample`` maps a metric name to a list of per-slice scalar values.
+    Returns ``{metric}`` (mean) and ``{metric}_std`` (spread across slices) so
+    every eval path produces identically-shaped error-bar-ready dicts.
+    """
+    import numpy as np
+
+    out = {}
+    for k, vals in per_sample.items():
+        arr = np.asarray(vals, dtype=np.float64)
+        out[k] = float(arr.mean())
+        out[f"{k}_std"] = float(arr.std())
+    return out
+
+
 @torch.no_grad()
 def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     """Mean + std of each metric plus inference latency / peak memory.
@@ -192,7 +209,6 @@ def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     (CUDA only). Latency is wall-clock around the forward path only, so it is
     the deployable inference cost, independent of dataset size.
     """
-    import numpy as np
     model.eval()
     _orig_steps = getattr(model, "num_steps", None)
     if _orig_steps is not None and eval_steps is not None:
@@ -224,11 +240,7 @@ def evaluate(model, loader, device, full_slice, patch_size, eval_steps=None):
     if _orig_steps is not None:
         model.num_steps = _orig_steps
 
-    out = {}
-    for k, vals in per_sample.items():
-        arr = np.asarray(vals, dtype=np.float64)
-        out[k] = float(arr.mean())
-        out[f"{k}_std"] = float(arr.std())
+    out = _summarize(per_sample)
     out["latency_ms"] = 1000.0 * infer_s / max(n, 1)
     if device.type == "cuda":
         out["peak_mem_mb"] = torch.cuda.max_memory_allocated(device) / 1e6
@@ -242,21 +254,16 @@ def identity_baseline(loader, device):
     This is the "do nothing" denoiser: ``pred = low``. It establishes the floor
     every trained model must beat and is the reference against which the
     per-image zsn2n results should be read (a near-identity output scores high
-    when ``low`` is already close to ``full``). Returns the same metric dict as
-    :func:`evaluate`.
+    when ``low`` is already close to ``full``). Returns mean and per-slice
+    ``{metric}_std`` keys, matching :func:`evaluate`.
     """
-    n, p, s, r, g, nps = 0, 0.0, 0.0, 0.0, 0.0, 0.0
+    per_sample = {k: [] for k in _METRIC_FNS}
     for low, full in loader:
         low, full = low.to(device), full.to(device)
         pred = low.clamp(0.0, 1.0)
-        bs = low.size(0)
-        p += psnr(pred, full) * bs
-        s += ssim(pred, full) * bs
-        r += rmse(pred, full) * bs
-        g += gmsd(pred, full) * bs
-        nps += nps_ratio(pred, full) * bs
-        n += bs
-    return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
+        for k, fn in _METRIC_FNS.items():
+            per_sample[k].append(fn(pred, full))
+    return _summarize(per_sample)
 
 
 def run_zsn2n_eval(loader, device, args):
@@ -264,11 +271,11 @@ def run_zsn2n_eval(loader, device, args):
 
     For each noisy slice in ``loader``, a fresh tiny network is trained from
     scratch on that image alone (no shared weights, no checkpoint) and the
-    denoised result is scored against the clean ``full`` reference. Returns the
-    same metric dict as :func:`evaluate` so results are directly comparable to
-    the supervised / N2V models.
+    denoised result is scored against the clean ``full`` reference. Returns mean
+    and per-slice ``{metric}_std`` keys, matching :func:`evaluate` so results are
+    directly comparable to the supervised / N2V models.
     """
-    n, p, s, r, g, nps = 0, 0.0, 0.0, 0.0, 0.0, 0.0
+    per_sample = {k: [] for k in _METRIC_FNS}
     for low, full in loader:
         low, full = low.to(device), full.to(device)
         pred = zsn2n_denoise_image(
@@ -281,14 +288,9 @@ def run_zsn2n_eval(loader, device, args):
         ).clamp(0.0, 1.0)
         # denoise_image may crop odd dims to even; align the reference to match.
         full = full[..., : pred.shape[-2], : pred.shape[-1]]
-        bs = low.size(0)
-        p += psnr(pred, full) * bs
-        s += ssim(pred, full) * bs
-        r += rmse(pred, full) * bs
-        g += gmsd(pred, full) * bs
-        nps += nps_ratio(pred, full) * bs
-        n += bs
-    return {"psnr": p / n, "ssim": s / n, "rmse": r / n, "gmsd": g / n, "nps_ratio": nps / n}
+        for k, fn in _METRIC_FNS.items():
+            per_sample[k].append(fn(pred, full))
+    return _summarize(per_sample)
 
 
 @torch.no_grad()
