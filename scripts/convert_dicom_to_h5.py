@@ -8,6 +8,7 @@ can copy in seconds instead of minutes.
 """
 
 import argparse
+import os
 import time
 
 import h5py
@@ -62,8 +63,13 @@ def main():
     print(f"Found {len(patients)} paired patients: {patients}")
     print(f"Window: anatomy={args.anatomy} offset={offset} scale={scale}")
 
+    # Write to a temp file and rename only once the whole cache is on disk, so
+    # an interrupted/crashed run never leaves a half-written .h5 in place. A
+    # truncated cache fails to open later with the cryptic h5py "bad object
+    # header version number" error, taking down every sweep agent that reads it.
     t0 = time.time()
-    with h5py.File(args.output, "w") as f:
+    tmp_output = f"{args.output}.tmp"
+    with h5py.File(tmp_output, "w") as f:
         f.attrs["hu_offset"] = offset
         f.attrs["hu_scale"] = scale
         f.attrs["anatomy"] = args.anatomy
@@ -116,8 +122,9 @@ def main():
                 f"noise(mean|low-full|)={noise:.4f}, {elapsed:.1f}s"
             )
 
+    os.replace(tmp_output, args.output)
+
     total = time.time() - t0
-    import os
     size_mb = os.path.getsize(args.output) / 1e6
     print(f"\nDone: {args.output} ({size_mb:.1f} MB) in {total:.1f}s")
 

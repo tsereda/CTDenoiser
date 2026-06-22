@@ -27,6 +27,41 @@ ANATOMY_WINDOWS = {
 }
 
 
+def open_h5(h5_path, mode="r"):
+    """Open an HDF5 cache, turning a corrupt/missing file into a clear error.
+
+    h5py's native message for a truncated or partially-written cache is the
+    cryptic ``OSError: Unable to synchronously open file (bad object header
+    version number)``. Since the sweep agents copy the cache off a PVC, the
+    usual culprit is a source file left half-written by an interrupted
+    ``convert_dicom_to_h5.py`` run (or a truncated copy). Surface that.
+    """
+    import os
+
+    import h5py
+
+    if not os.path.exists(h5_path):
+        raise FileNotFoundError(
+            f"HDF5 cache {h5_path!r} does not exist. Generate it with "
+            f"scripts/convert_dicom_to_h5.py and copy it into place."
+        )
+    size = os.path.getsize(h5_path)
+    if size == 0:
+        raise OSError(
+            f"HDF5 cache {h5_path!r} is empty (0 bytes) -- the conversion or "
+            f"the copy that produced it did not finish. Regenerate it."
+        )
+    try:
+        return h5py.File(h5_path, mode)
+    except OSError as e:
+        raise OSError(
+            f"Could not open HDF5 cache {h5_path!r} ({size / 1e6:.1f} MB): {e}. "
+            f"The file is likely truncated or partially written -- an "
+            f"interrupted scripts/convert_dicom_to_h5.py run or an incomplete "
+            f"copy leaves a corrupt cache. Regenerate it and copy it again."
+        ) from e
+
+
 def window_for_anatomy(anatomy):
     """Return the ``(hu_offset, hu_scale)`` window preset for an anatomy name."""
     try:
@@ -177,15 +212,13 @@ class HDF5CTDataset(_PairedCTBase):
     """
 
     def __init__(self, h5_path, patients, patch_size=64, train=True):
-        import h5py
-
         self.patch_size = patch_size
         self.train = train
         self.low_volumes: dict[str, np.ndarray] = {}
         self.full_volumes: dict[str, np.ndarray] = {}
         self.samples: list[tuple[str, int]] = []
 
-        with h5py.File(h5_path, "r") as f:
+        with open_h5(h5_path, "r") as f:
             for pid in patients:
                 grp = f[f"patients/{pid}"]
                 low_vol = grp["low"][:]
@@ -204,9 +237,7 @@ class HDF5CTDataset(_PairedCTBase):
 
     @staticmethod
     def list_patients(h5_path):
-        import h5py
-
-        with h5py.File(h5_path, "r") as f:
+        with open_h5(h5_path, "r") as f:
             return sorted(f["patients"].keys())
 
     @classmethod
