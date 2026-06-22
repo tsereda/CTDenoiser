@@ -123,12 +123,14 @@ def test_build_html_round_trips(tmp_path):
              anatomy="abdomen", param_count=1.8e6, model_size_mb=7.2,
              **{"val/latency_ms": 22.0, "val/psnr": 31.4, "val/psnr_std": 0.8,
                 "val/ssim": 0.91, "val/rmse": 0.03, "val/gmsd": 0.02,
-                "val/nps_ratio": 0.5, "baseline/psnr": 27.0}),
+                "val/nps_ratio": 0.5, "baseline/psnr": 27.0,
+                "baseline/psnr_std": 0.6}),
         dict(State="finished", model="ctformer", **{"training-mode": "supervised"},
              anatomy="abdomen", param_count=1.4e6, model_size_mb=5.6,
              **{"val/latency_ms": 48.0, "val/psnr": 32.1, "val/psnr_std": 0.7,
                 "val/ssim": 0.92, "val/rmse": 0.028, "val/gmsd": 0.018,
-                "val/nps_ratio": 0.48, "baseline/psnr": 27.0}),
+                "val/nps_ratio": 0.48, "baseline/psnr": 27.0,
+                "baseline/psnr_std": 0.5}),
     ])
     html = report.build_html(report.tidy(df), images_dir=None)
     assert "CTDenoiser benchmark" in html

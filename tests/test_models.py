@@ -79,6 +79,49 @@ def test_metrics_identity():
     assert ssim(a, a) == pytest.approx(1.0, abs=1e-4)
 
 
+_EXPECTED_METRIC_KEYS = {
+    "psnr", "psnr_std", "ssim", "ssim_std", "rmse", "rmse_std",
+    "gmsd", "gmsd_std", "nps_ratio", "nps_ratio_std",
+}
+
+
+def _synthetic_loader(length=4, patch_size=32):
+    from torch.utils.data import DataLoader
+
+    from ctdenoiser.data import SyntheticCTDataset
+
+    ds = SyntheticCTDataset(length=length, patch_size=patch_size)
+    return DataLoader(ds, batch_size=1, shuffle=False)
+
+
+def test_eval_paths_report_std():
+    """evaluate / identity_baseline / run_zsn2n_eval all emit per-slice std."""
+    import types
+
+    from ctdenoiser.train import evaluate, identity_baseline, run_zsn2n_eval
+
+    device = torch.device("cpu")
+    loader = _synthetic_loader()
+
+    model = REDCNN(num_filters=8)
+    eval_out = evaluate(model, loader, device, full_slice=False, patch_size=32)
+    assert _EXPECTED_METRIC_KEYS <= set(eval_out)
+
+    base_out = identity_baseline(loader, device)
+    assert _EXPECTED_METRIC_KEYS <= set(base_out)
+
+    args = types.SimpleNamespace(
+        zsn2n_iters=2, zsn2n_lr=1e-3, zsn2n_channels=4, seed=0
+    )
+    zs_out = run_zsn2n_eval(loader, device, args)
+    assert _EXPECTED_METRIC_KEYS <= set(zs_out)
+
+    # std is a real non-negative spread, not a placeholder.
+    for out in (eval_out, base_out, zs_out):
+        for k in ("psnr_std", "ssim_std", "gmsd_std"):
+            assert out[k] >= 0.0
+
+
 def test_synthetic_dataset_shapes():
     from ctdenoiser.data import SyntheticCTDataset
 
