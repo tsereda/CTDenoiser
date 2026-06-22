@@ -5,6 +5,7 @@ from ctdenoiser.data.dataset import (
     HU_OFFSET,
     HU_SCALE,
     normalize_hu,
+    open_h5,
     pair_noise_stats,
 )
 
@@ -40,6 +41,28 @@ def test_pair_noise_stats_warns_on_identical(capsys):
     diff = pair_noise_stats("p1", vol, vol.copy())
     assert diff == pytest.approx(0.0, abs=1e-9)
     assert "nearly identical" in capsys.readouterr().out
+
+
+def test_open_h5_missing_file_raises_file_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        open_h5(tmp_path / "nope.h5")
+
+
+def test_open_h5_empty_file_raises_clear_error(tmp_path):
+    empty = tmp_path / "empty.h5"
+    empty.write_bytes(b"")
+    with pytest.raises(OSError, match="empty"):
+        open_h5(empty)
+
+
+def test_open_h5_corrupt_file_explains_truncation(tmp_path):
+    # A non-HDF5 / truncated file is what an interrupted conversion leaves
+    # behind; the wrapped error should point at regenerating the cache rather
+    # than surfacing h5py's cryptic "bad object header version number".
+    corrupt = tmp_path / "corrupt.h5"
+    corrupt.write_bytes(b"not really an hdf5 file")
+    with pytest.raises(OSError, match="truncated or partially written"):
+        open_h5(corrupt)
 
 
 def test_wide_window_washes_out_noise():
