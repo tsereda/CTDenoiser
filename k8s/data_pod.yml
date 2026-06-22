@@ -27,8 +27,18 @@ spec:
           export ANATOMY="${ANATOMY:-chest}"
           export MAX_PATIENTS="${MAX_PATIENTS:-1000}"
 
-          # Download DICOM data from TCIA
-          python3 -c "
+          DICOM_DIR=/data/ldct_dicom
+          export H5_OUT="/data/ldct_${ANATOMY}.h5"
+
+          # 1. Download DICOM from TCIA -- skip if the PVC already holds it, so
+          #    re-running the pod (e.g. for a second anatomy) does not re-pull
+          #    gigabytes. Download into /tmp first, then copy onto the PVC only
+          #    once it finished, so an interrupted download leaves no partial
+          #    /data/ldct_dicom behind.
+          if [ -d "$DICOM_DIR" ] && [ -n "$(ls -A "$DICOM_DIR" 2>/dev/null)" ]; then
+            echo "DICOM already present at $DICOM_DIR, skipping download."
+          else
+            python3 -c "
           from tcia_utils import nbia
           import pandas as pd, os
 
@@ -50,15 +60,17 @@ spec:
           nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=DICOM_DIR, input_type='list')
           print('Done. Data saved to /tmp/ldct_dicom/')
           "
+            mkdir -p "$DICOM_DIR"
+            cp -r /tmp/ldct_dicom/. "$DICOM_DIR"/
+            echo "Download complete. Data copied to $DICOM_DIR."
+          fi
 
-          cp -r /tmp/ldct_dicom /data/ldct_dicom
-          echo "Download complete. Data copied to /data/ldct_dicom."
-
-          # Clone the repo and run DICOM-to-HDF5 conversion. Install the package
-          # itself (editable) so `import ctdenoiser` resolves -- running the
-          # script alone only puts scripts/ on sys.path, not the repo root.
-          # torch comes from the CPU index to avoid a multi-GB CUDA wheel on this
-          # CPU-only data pod.
+          # 2. Clone the repo and run DICOM-to-HDF5 conversion. Install the
+          #    package itself (editable) so `import ctdenoiser` resolves --
+          #    running the script alone only puts scripts/ on sys.path, not the
+          #    repo root. torch comes from the CPU index to avoid a multi-GB
+          #    CUDA wheel on this CPU-only data pod. The converter writes the
+          #    .h5 atomically, so overwriting an existing cache is safe.
           git clone https://github.com/tsereda/ctdenoiser.git /app/ctdenoiser
           cd /app/ctdenoiser
           pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
@@ -66,10 +78,30 @@ spec:
 
           echo "Running DICOM to HDF5 conversion (anatomy=$ANATOMY)..."
           python scripts/convert_dicom_to_h5.py \
-            --dicom-root /data/ldct_dicom \
-            --output "/data/ldct_${ANATOMY}.h5" \
+            --dicom-root "$DICOM_DIR" \
+            --output "$H5_OUT" \
             --anatomy "$ANATOMY"
-          echo "Conversion complete. HDF5 saved to /data/ldct_${ANATOMY}.h5"
+          echo "Conversion complete. HDF5 saved to $H5_OUT"
+
+          # 3. Quick sanity check: the cache opens and lists patients. This is
+          #    the exact open path the sweep agents use, so a pass here means the
+          #    PVC is ready; a fail aborts the pod (set -e) before a broken cache
+          #    can take down a whole sweep. Listing groups is instant -- it does
+          #    not read any volume data.
+          echo "Validating $H5_OUT ..."
+          python3 -c "
+          import os, sys
+          from ctdenoiser.data.dataset import HDF5CTDataset
+          path = os.environ['H5_OUT']
+          patients = HDF5CTDataset.list_patients(path)
+          if not patients:
+              sys.exit(f'Validation failed: {path} contains no patients')
+          print(f'OK: {path} -> {len(patients)} patients, {os.path.getsize(path)/1e6:.1f} MB')
+          "
+
+          # 4. Show the final PVC state the sweep will consume.
+          echo "=== PVC ready -- contents of /data ==="
+          ls -lah /data/
       volumeMounts:
         - name: workspace
           mountPath: /app
