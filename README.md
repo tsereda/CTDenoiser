@@ -130,16 +130,18 @@ silently mis-pairing.
 
 ### Per-anatomy benchmark workflow
 
-The data pod downloads one cohort and writes a self-describing cache
-`/data/ldct_<anatomy>.h5` (window baked in, anatomy stored in the file attrs).
-Download each anatomy **once**, then sweep any of them anytime — caches coexist
-on the PVC:
+The data pod prepares **every** anatomy cache in a single run: for each anatomy
+it downloads the cohort and writes a self-describing cache
+`/data/ldct_<anatomy>.h5` (window baked in, anatomy stored in the file attrs),
+validating each before moving on. Run the pod **once** and all caches are ready;
+sweep any of them anytime — caches coexist on the PVC:
 
 ```bash
-# 1. download + cache each anatomy once (BODY_PART/ANATOMY set on the data pod)
-BODY_PART=ABDOMEN ANATOMY=abdomen → ldct_abdomen.h5
-BODY_PART=CHEST   ANATOMY=chest   → ldct_chest.h5
-BODY_PART=HEAD    ANATOMY=head    → ldct_head.h5
+# 1. one data-pod run -> ldct_abdomen.h5, ldct_chest.h5, ldct_head.h5
+#    Idempotent: a valid cache is skipped on re-run, and a missing/corrupt one
+#    is re-converted (so an interrupted earlier run self-heals). Override the
+#    set with ANATOMIES, e.g. ANATOMIES="abdomen chest" for a subset.
+kubectl apply -f k8s/data_pod.yml -n usd-djha
 
 # 2. one sweep per anatomy (picks /data/ldct_<anatomy>.h5)
 python sweep.py sweep.yml --anatomy abdomen --agents 8

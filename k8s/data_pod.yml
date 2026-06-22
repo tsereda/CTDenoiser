@@ -19,30 +19,84 @@ spec:
           apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
           pip install --no-cache-dir tcia_utils pydicom pandas h5py numpy
 
-          # Which anatomy cohort to pull. BODY_PART selects the TCIA scans;
-          # ANATOMY picks the matching HU window for the HDF5 conversion below.
-          #   ABDOMEN -> abdomen,  CHEST -> chest,  HEAD -> head
-          # MAX_PATIENTS caps the cohort (empty = all paired patients, ~50 abdomen).
-          export BODY_PART="${BODY_PART:-CHEST}"
-          export ANATOMY="${ANATOMY:-chest}"
+          # Clone the repo and install the package once (the conversion +
+          # validation steps below need `import ctdenoiser`; running the script
+          # alone only puts scripts/ on sys.path, not the repo root). torch comes
+          # from the CPU index to avoid a multi-GB CUDA wheel on this CPU-only pod.
+          git clone https://github.com/tsereda/ctdenoiser.git /app/ctdenoiser
+          cd /app/ctdenoiser
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --no-cache-dir -e ".[h5]"
+
+          # ANATOMIES is the space-separated list of caches one run prepares.
+          # Each anatomy maps to a TCIA BODY_PART cohort and a baked-in HU window,
+          # so a single pod leaves every /data/ldct_<anatomy>.h5 validated on the
+          # PVC -- run it once and every sweep has its cache ready. Override
+          # ANATOMIES to prepare a subset. MAX_PATIENTS caps each cohort
+          # (empty = all paired patients).
+          export ANATOMIES="${ANATOMIES:-abdomen chest head}"
           export MAX_PATIENTS="${MAX_PATIENTS:-1000}"
 
-          DICOM_DIR=/data/ldct_dicom
-          export H5_OUT="/data/ldct_${ANATOMY}.h5"
-
-          # 1. Download DICOM from TCIA -- skip if the PVC already holds it, so
-          #    re-running the pod (e.g. for a second anatomy) does not re-pull
-          #    gigabytes. Download into /tmp first, then copy onto the PVC only
-          #    once it finished, so an interrupted download leaves no partial
-          #    /data/ldct_dicom behind.
-          if [ -d "$DICOM_DIR" ] && [ -n "$(ls -A "$DICOM_DIR" 2>/dev/null)" ]; then
-            echo "DICOM already present at $DICOM_DIR, skipping download."
-          else
+          # Returns 0 iff the cache opens and lists patients -- the exact path the
+          # sweep agents use. Lets us skip an already-good cache and, crucially,
+          # detect a stale/corrupt one (the cryptic h5py "bad object header version
+          # number") so it gets re-converted instead of silently breaking a sweep.
+          cache_valid() {
             python3 -c "
+          import sys
+          from ctdenoiser.data.dataset import HDF5CTDataset
+          try:
+              pts = HDF5CTDataset.list_patients('$1')
+          except Exception as e:
+              print(f'  cache check failed: {e}')
+              sys.exit(1)
+          sys.exit(0 if pts else 1)
+          "
+          }
+
+          for ANATOMY in $ANATOMIES; do
+            case "$ANATOMY" in
+              abdomen) BODY_PART=ABDOMEN ;;
+              chest)   BODY_PART=CHEST ;;
+              head)    BODY_PART=HEAD ;;
+              *) echo "Unknown anatomy '$ANATOMY' (expected: abdomen chest head)" >&2; exit 1 ;;
+            esac
+            DICOM_DIR="/data/ldct_dicom_${ANATOMY}"
+            export ANATOMY BODY_PART MAX_PATIENTS
+            export H5_OUT="/data/ldct_${ANATOMY}.h5"
+
+            echo ""
+            echo "================ $ANATOMY ($BODY_PART) ================"
+
+            # Skip the whole anatomy if a valid cache already exists -- makes
+            # re-running the pod cheap and idempotent. A corrupt/stale cache (e.g.
+            # one left by an interrupted older run) fails this check and is
+            # re-converted below; the converter writes atomically, so overwriting
+            # a broken cache in place is safe.
+            if [ -f "$H5_OUT" ] && cache_valid "$H5_OUT"; then
+              echo "Valid cache already present at $H5_OUT, skipping."
+              continue
+            fi
+            if [ -f "$H5_OUT" ]; then
+              echo "Existing $H5_OUT is missing/corrupt -- re-converting from DICOM."
+            fi
+
+            # 1. Download DICOM from TCIA into this anatomy's own dir -- skip if
+            #    the PVC already holds it, so re-running does not re-pull
+            #    gigabytes. Each anatomy gets its own /data/ldct_dicom_<anatomy>
+            #    so one cohort's presence never masks another's absence. Download
+            #    into /tmp first, then copy onto the PVC only once complete, so an
+            #    interrupted download leaves no partial cohort behind.
+            if [ -d "$DICOM_DIR" ] && [ -n "$(ls -A "$DICOM_DIR" 2>/dev/null)" ]; then
+              echo "DICOM already present at $DICOM_DIR, skipping download."
+            else
+              TMP_DIR="/tmp/ldct_dicom_${ANATOMY}"
+              export TMP_DIR
+              python3 -c "
           from tcia_utils import nbia
           import pandas as pd, os
 
-          DICOM_DIR = '/tmp/ldct_dicom'
+          TMP_DIR = os.environ['TMP_DIR']
           BODY_PART = os.environ['BODY_PART']
           _mp = os.environ.get('MAX_PATIENTS', '').strip()
           MAX_PATIENTS = int(_mp) if _mp else None
@@ -56,51 +110,50 @@ spec:
               paired = paired[:MAX_PATIENTS]
           sub = imgs[imgs['PatientID'].isin(paired)]
           print(f'Downloading {len(sub)} series for {len(paired)} {BODY_PART} patients...')
-          os.makedirs(DICOM_DIR, exist_ok=True)
-          nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=DICOM_DIR, input_type='list')
-          print('Done. Data saved to /tmp/ldct_dicom/')
+          os.makedirs(TMP_DIR, exist_ok=True)
+          nbia.downloadSeries(series_data=sub['SeriesInstanceUID'].tolist(), path=TMP_DIR, input_type='list')
+          print(f'Done. Data saved to {TMP_DIR}')
           "
-            mkdir -p "$DICOM_DIR"
-            cp -r /tmp/ldct_dicom/. "$DICOM_DIR"/
-            echo "Download complete. Data copied to $DICOM_DIR."
-          fi
+              mkdir -p "$DICOM_DIR"
+              cp -r "$TMP_DIR"/. "$DICOM_DIR"/
+              rm -rf "$TMP_DIR"
+              echo "Download complete. Data copied to $DICOM_DIR."
+            fi
 
-          # 2. Clone the repo and run DICOM-to-HDF5 conversion. Install the
-          #    package itself (editable) so `import ctdenoiser` resolves --
-          #    running the script alone only puts scripts/ on sys.path, not the
-          #    repo root. torch comes from the CPU index to avoid a multi-GB
-          #    CUDA wheel on this CPU-only data pod. The converter writes the
-          #    .h5 atomically, so overwriting an existing cache is safe.
-          git clone https://github.com/tsereda/ctdenoiser.git /app/ctdenoiser
-          cd /app/ctdenoiser
-          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --no-cache-dir -e ".[h5]"
+            # 2. Convert DICOM -> HDF5. The converter bakes in the anatomy's HU
+            #    window and writes the .h5 atomically (tmp + rename), so this is
+            #    safe to run over an existing/corrupt cache.
+            echo "Running DICOM to HDF5 conversion (anatomy=$ANATOMY)..."
+            python scripts/convert_dicom_to_h5.py \
+              --dicom-root "$DICOM_DIR" \
+              --output "$H5_OUT" \
+              --anatomy "$ANATOMY"
 
-          echo "Running DICOM to HDF5 conversion (anatomy=$ANATOMY)..."
-          python scripts/convert_dicom_to_h5.py \
-            --dicom-root "$DICOM_DIR" \
-            --output "$H5_OUT" \
-            --anatomy "$ANATOMY"
-          echo "Conversion complete. HDF5 saved to $H5_OUT"
+            # 3. Validate the freshly written cache before moving on. A fail here
+            #    aborts the pod (set -e) rather than leaving a broken cache for a
+            #    sweep to choke on. Listing groups is instant -- no volume read.
+            echo "Validating $H5_OUT ..."
+            if ! cache_valid "$H5_OUT"; then
+              echo "Validation failed: $H5_OUT did not open with patients after conversion." >&2
+              exit 1
+            fi
+            echo "OK: $H5_OUT ready."
+          done
 
-          # 3. Quick sanity check: the cache opens and lists patients. This is
-          #    the exact open path the sweep agents use, so a pass here means the
-          #    PVC is ready; a fail aborts the pod (set -e) before a broken cache
-          #    can take down a whole sweep. Listing groups is instant -- it does
-          #    not read any volume data.
-          echo "Validating $H5_OUT ..."
-          python3 -c "
-          import os, sys
+          # 4. Final summary: confirm every requested cache opens and report its
+          #    patient count / size, then show the PVC state the sweeps consume.
+          echo ""
+          echo "=== All caches ready -- /data ==="
+          for ANATOMY in $ANATOMIES; do
+            export H5_OUT="/data/ldct_${ANATOMY}.h5"
+            python3 -c "
+          import os
           from ctdenoiser.data.dataset import HDF5CTDataset
-          path = os.environ['H5_OUT']
-          patients = HDF5CTDataset.list_patients(path)
-          if not patients:
-              sys.exit(f'Validation failed: {path} contains no patients')
-          print(f'OK: {path} -> {len(patients)} patients, {os.path.getsize(path)/1e6:.1f} MB')
+          p = os.environ['H5_OUT']
+          pts = HDF5CTDataset.list_patients(p)
+          print(f'  {p}: {len(pts)} patients, {os.path.getsize(p)/1e6:.1f} MB')
           "
-
-          # 4. Show the final PVC state the sweep will consume.
-          echo "=== PVC ready -- contents of /data ==="
+          done
           ls -lah /data/
       volumeMounts:
         - name: workspace
