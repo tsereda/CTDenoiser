@@ -111,8 +111,9 @@ def tidy(df: pd.DataFrame) -> pd.DataFrame:
 
     numeric = [c for c, *_ in QUALITY] + [c for c, *_ in COST] + ["baseline/psnr"]
     for c in numeric:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+        # Some exports omit cost columns (param_count, latency, …); create them
+        # as all-NaN so downstream code can treat "missing" and "empty" alike.
+        df[c] = pd.to_numeric(df[c], errors="coerce") if c in df.columns else np.nan
     df = df[df.get("val/psnr").notna()].copy() if "val/psnr" in df.columns else df
     return df
 
@@ -158,6 +159,8 @@ def _fig_to_b64(fig) -> str:
 
 
 def pareto_png(best: pd.DataFrame, cost_col: str, cost_label: str) -> str | None:
+    if cost_col not in best.columns:
+        return None
     sub = best.dropna(subset=[cost_col, "val/psnr"])
     if sub.empty:
         return None
