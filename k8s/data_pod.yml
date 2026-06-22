@@ -23,8 +23,8 @@ spec:
           # ANATOMY picks the matching HU window for the HDF5 conversion below.
           #   ABDOMEN -> abdomen,  CHEST -> chest,  HEAD -> head
           # MAX_PATIENTS caps the cohort (empty = all paired patients, ~50 abdomen).
-          export BODY_PART="${BODY_PART:-ABDOMEN}"
-          export ANATOMY="${ANATOMY:-abdomen}"
+          export BODY_PART="${BODY_PART:-CHEST}"
+          export ANATOMY="${ANATOMY:-chest}"
           export MAX_PATIENTS="${MAX_PATIENTS:-1000}"
 
           # Download DICOM data from TCIA
