@@ -441,7 +441,7 @@ def main(argv=None):
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--wandb-project", type=str, default=None,
                         help="W&B project name; enables per-epoch metric logging")
-    parser.add_argument("--log-images", type=int, default=4, metavar="N",
+    parser.add_argument("--log-images", type=int, default=0, metavar="N",
                         help="number of val samples to log as images each epoch (0=off)")
     parser.add_argument("--log-image-freq", type=int, default=1, metavar="FREQ",
                         help="log images every FREQ epochs (default: every epoch)")
