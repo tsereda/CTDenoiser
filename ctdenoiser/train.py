@@ -42,8 +42,9 @@ from .data.dataset import (
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
-from .selfsupervised import n2v_training_step
+from .selfsupervised import n2sim_training_step, n2v_training_step
 from .zeroshot import denoise_image as zsn2n_denoise_image
+from .zeroshot import denoise_image_f2n as f2n_denoise_image
 
 MODELS = {
     "ctformer": CTformer,
@@ -293,6 +294,35 @@ def run_zsn2n_eval(loader, device, args):
     return _summarize(per_sample)
 
 
+def run_f2n_eval(loader, device, args):
+    """Per-image Filter2Noise evaluation.
+
+    For each noisy slice in ``loader``, a fresh attention-guided bilateral
+    filter stack is trained from scratch on that image alone (no shared weights,
+    no checkpoint) and the denoised result is scored against the clean ``full``
+    reference. Returns mean and per-slice ``{metric}_std`` keys, matching
+    :func:`evaluate` so results are directly comparable to the other methods.
+    """
+    per_sample = {k: [] for k in _METRIC_FNS}
+    for low, full in loader:
+        low, full = low.to(device), full.to(device)
+        pred = f2n_denoise_image(
+            low,
+            num_iters=args.f2n_iters,
+            lr=args.f2n_lr,
+            num_layers=args.f2n_layers,
+            radius=args.f2n_radius,
+            num_channels=args.f2n_channels,
+            device=device,
+            seed=args.seed,
+        ).clamp(0.0, 1.0)
+        # denoise_image_f2n may crop odd dims to even; align the reference.
+        full = full[..., : pred.shape[-2], : pred.shape[-1]]
+        for k, fn in _METRIC_FNS.items():
+            per_sample[k].append(fn(pred, full))
+    return _summarize(per_sample)
+
+
 @torch.no_grad()
 def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, epoch=None):
     """Log a [low-dose | predicted | full-dose | |diff|] panel grid to W&B."""
@@ -346,22 +376,40 @@ def main(argv=None):
     parser.add_argument("--model", choices=MODELS, default="ctformer")
     parser.add_argument(
         "--training-mode",
-        choices=["supervised", "n2v", "zsn2n"],
+        choices=["supervised", "n2v", "n2sim", "zsn2n", "f2n"],
         default="supervised",
         help="supervised: clean-target MSE/flow loss (default). "
              "n2v: Noise2Void blind-spot self-supervision (clean target ignored). "
-             "zsn2n: per-image zero-shot test-time training (no shared model/checkpoint).",
+             "n2sim: Noise2Sim similarity-based self-supervision (clean target ignored). "
+             "zsn2n: per-image zero-shot test-time training (no shared model/checkpoint). "
+             "f2n: per-image Filter2Noise attention-guided bilateral filtering (no checkpoint).",
     )
     parser.add_argument("--n2v-mask-fraction", type=float, default=0.02,
                         help="fraction of pixels masked as blind spots (n2v)")
     parser.add_argument("--n2v-neighbor-radius", type=int, default=2,
                         help="neighbour window radius for blind-spot replacement (n2v)")
+    parser.add_argument("--n2sim-search-radius", type=int, default=4,
+                        help="window radius searched for a similar pixel (n2sim)")
+    parser.add_argument("--n2sim-patch-radius", type=int, default=1,
+                        help="patch radius used to score pixel similarity (n2sim)")
+    parser.add_argument("--n2sim-num-similar", type=int, default=1,
+                        help="number of best matches averaged into the target (n2sim)")
     parser.add_argument("--zsn2n-iters", type=int, default=2000,
                         help="per-image optimisation steps (zsn2n)")
     parser.add_argument("--zsn2n-channels", type=int, default=48,
                         help="hidden width of the per-image network (zsn2n)")
     parser.add_argument("--zsn2n-lr", type=float, default=1e-3,
                         help="learning rate for per-image optimisation (zsn2n)")
+    parser.add_argument("--f2n-iters", type=int, default=1500,
+                        help="per-image optimisation steps (f2n)")
+    parser.add_argument("--f2n-layers", type=int, default=2,
+                        help="number of stacked attention bilateral filters (f2n)")
+    parser.add_argument("--f2n-radius", type=int, default=3,
+                        help="bilateral filter window radius (f2n)")
+    parser.add_argument("--f2n-channels", type=int, default=16,
+                        help="hidden width of the parameter-prediction net (f2n)")
+    parser.add_argument("--f2n-lr", type=float, default=1e-3,
+                        help="learning rate for per-image optimisation (f2n)")
     parser.add_argument("--dicom-root", type=str, default=None,
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--h5-path", type=str, default=None,
@@ -399,10 +447,10 @@ def main(argv=None):
                         help="log images every FREQ epochs (default: every epoch)")
     args = parser.parse_args(argv)
 
-    if args.training_mode == "n2v" and args.model == "flowmatching":
+    if args.training_mode in ("n2v", "n2sim") and args.model == "flowmatching":
         parser.error(
             "flowmatching needs paired clean targets; it is incompatible with "
-            "--training-mode n2v. Use --training-mode supervised."
+            f"--training-mode {args.training_mode}. Use --training-mode supervised."
         )
 
     # Resolve the HU window: --anatomy preset, with explicit --hu-offset/--hu-scale
@@ -415,8 +463,10 @@ def main(argv=None):
     device = torch.device(
         args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     )
-    # zsn2n trains a fresh per-image net and ignores --model.
-    model_str = "per-image-net" if args.training_mode == "zsn2n" else args.model
+    # zsn2n / f2n train a fresh per-image net and ignore --model.
+    model_str = (
+        "per-image-net" if args.training_mode in ("zsn2n", "f2n") else args.model
+    )
     print(f"device={device}  model={model_str}  mode={args.training_mode}")
     train_loader, val_loader, full_slice = build_loaders(args)
 
@@ -455,14 +505,18 @@ def main(argv=None):
     if _wb:
         _wb.log({f"baseline/{k}": v for k, v in baseline.items()})
 
-    # Zero-Shot Noise2Noise trains a fresh per-image network at eval time; it has
-    # no shared model, training loop, or checkpoint, so it short-circuits here.
-    if args.training_mode == "zsn2n":
-        metrics = run_zsn2n_eval(val_loader, device, args)
+    # Zero-Shot Noise2Noise and Filter2Noise train a fresh per-image network at
+    # eval time; they have no shared model, training loop, or checkpoint, so they
+    # short-circuit here.
+    if args.training_mode in ("zsn2n", "f2n"):
+        if args.training_mode == "zsn2n":
+            metrics = run_zsn2n_eval(val_loader, device, args)
+        else:
+            metrics = run_f2n_eval(val_loader, device, args)
         print(
-            f"eval (zsn2n)  psnr={metrics['psnr']:.3f}  ssim={metrics['ssim']:.4f}  "
-            f"rmse={metrics['rmse']:.5f}  gmsd={metrics['gmsd']:.5f}  "
-            f"nps_ratio={metrics['nps_ratio']:.5f}"
+            f"eval ({args.training_mode})  psnr={metrics['psnr']:.3f}  "
+            f"ssim={metrics['ssim']:.4f}  rmse={metrics['rmse']:.5f}  "
+            f"gmsd={metrics['gmsd']:.5f}  nps_ratio={metrics['nps_ratio']:.5f}"
         )
         if _wb:
             _wb.log({f"val/{k}": v for k, v in metrics.items()})
@@ -499,6 +553,14 @@ def main(argv=None):
                     model, low,
                     mask_fraction=args.n2v_mask_fraction,
                     neighbor_radius=args.n2v_neighbor_radius,
+                )
+            elif args.training_mode == "n2sim":
+                # Self-supervised: similarity target from the noisy image itself.
+                loss = n2sim_training_step(
+                    model, low,
+                    search_radius=args.n2sim_search_radius,
+                    patch_radius=args.n2sim_patch_radius,
+                    num_similar=args.n2sim_num_similar,
                 )
             elif hasattr(model, "flow_loss"):
                 loss = model.flow_loss(low, full.to(device))

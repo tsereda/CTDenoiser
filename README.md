@@ -15,8 +15,8 @@ ctdenoiser/
   data/
     dataset.py         # DICOMCTDataset + SyntheticCTDataset
     dicom.py           # DICOM series reader (HU conversion)
-  selfsupervised.py    # Noise2Void blind-spot masking + loss
-  zeroshot.py          # Zero-Shot Noise2Noise (per-image, data-free)
+  selfsupervised.py    # Noise2Void blind-spot + Noise2Sim similarity self-supervision
+  zeroshot.py          # Zero-Shot Noise2Noise + Filter2Noise (per-image, data-free)
   metrics.py           # PSNR / SSIM / RMSE / GMSD / NPS-ratio
   inference.py         # overlapped full-slice inference
   train.py             # training loop / CLI
@@ -50,32 +50,56 @@ pytest -q
 ## Self-supervised / zero-shot training
 
 By default training is **supervised** (MSE / flow loss against the full-dose
-reference). Two methods train *without* a clean target, using only the noisy
-low-dose image — useful when paired LDCT/NDCT data are scarce. Both are still
+reference). Four methods train *without* a clean target, using only the noisy
+low-dose image — useful when paired LDCT/NDCT data are scarce. All are still
 evaluated against the clean `full` reference, so their PSNR / SSIM / RMSE / GMSD /
 NPS-ratio are directly comparable to the supervised models.
+
+Two are **dataset** self-supervised (`n2v`, `n2sim`) — they reuse any
+conv/transformer model and produce a normal checkpoint. Two are **per-image
+zero-shot** (`zsn2n`, `f2n`) — they ignore `--model` and train a fresh tiny
+network on each slice alone, saving no checkpoint.
 
 ```bash
 # Noise2Void: blind-spot self-supervision (reuses any conv/transformer model)
 python -m ctdenoiser.train --model redcnn --training-mode n2v \
     --dicom-root /data/ldct_dicom --epochs 50 --n2v-mask-fraction 0.02
 
+# Noise2Sim: similarity-based self-supervision (reuses any conv/transformer model)
+python -m ctdenoiser.train --model redcnn --training-mode n2sim \
+    --dicom-root /data/ldct_dicom --epochs 50 --n2sim-search-radius 4
+
 # Zero-Shot Noise2Noise: a fresh tiny network is trained per image, no training data
 python -m ctdenoiser.train --training-mode zsn2n \
     --dicom-root /data/ldct_dicom --zsn2n-iters 2000 --zsn2n-channels 48
 
+# Filter2Noise: per-image attention-guided bilateral filtering, no training data
+python -m ctdenoiser.train --training-mode f2n \
+    --dicom-root /data/ldct_dicom --f2n-iters 1500 --f2n-layers 2
+
 # Smoke tests on synthetic data
 python -m ctdenoiser.train --model unet --training-mode n2v --epochs 1
+python -m ctdenoiser.train --model unet --training-mode n2sim --epochs 1
 python -m ctdenoiser.train --training-mode zsn2n --synthetic-len 4 --zsn2n-iters 100
+python -m ctdenoiser.train --training-mode f2n --synthetic-len 4 --f2n-iters 100
 ```
 
 - `n2v` masks a fraction of pixels (`--n2v-mask-fraction`), replaces each with a
   random neighbour (`--n2v-neighbor-radius`), and trains the model to predict the
   original value at those blind spots. Produces a normal checkpoint.
-  `flowmatching` is **not** compatible with `n2v` (it needs paired targets).
+- `n2sim` builds a per-pixel target by searching a `--n2sim-search-radius` window
+  for the `--n2sim-num-similar` most-similar pixels (matched over a
+  `--n2sim-patch-radius` patch) and regresses the noisy image onto their average.
+  Exploits non-local self-similarity instead of a blind spot, so the model sees
+  the un-masked input. Produces a normal checkpoint.
+- `flowmatching` is **not** compatible with `n2v` / `n2sim` (it needs paired targets).
 - `zsn2n` ignores `--model`: for each slice it trains a small 2-layer network from
   scratch on that image alone (`--zsn2n-iters`, `--zsn2n-channels`, `--zsn2n-lr`)
   and denoises it. No checkpoint is saved (per-image networks are discarded).
+- `f2n` (Filter2Noise) also ignores `--model`: per slice it trains a stack of
+  `--f2n-layers` *interpretable* attention-guided bilateral filters
+  (`--f2n-radius`, `--f2n-channels`, `--f2n-iters`, `--f2n-lr`) using the same
+  self-supervised pair-downsampler loss as `zsn2n`. No checkpoint is saved.
 
 These are the self-supervised rows of the benchmark; see [`docs/future.md`](docs/future.md)
 for how they fit the long-term research plan.

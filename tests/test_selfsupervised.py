@@ -7,12 +7,17 @@ torch = pytest.importorskip("torch")
 from ctdenoiser.models import REDCNN
 from ctdenoiser.selfsupervised import (
     make_blind_spot_mask,
+    make_similarity_target,
+    n2sim_training_step,
     n2v_training_step,
     replace_with_neighbors,
 )
 from ctdenoiser.zeroshot import (
+    AttentionBilateralFilter,
+    Filter2NoiseNetwork,
     ZSN2NNetwork,
     denoise_image,
+    denoise_image_f2n,
     pair_downsampler,
     zsn2n_loss,
 )
@@ -61,6 +66,50 @@ def test_n2v_works_on_small_patch():
     loss.backward()  # must not raise
 
 
+# ----- Noise2Sim (similarity-based self-supervision) -----
+
+def test_similarity_target_shape_and_finite():
+    noisy = torch.rand(2, 1, 16, 16)
+    target = make_similarity_target(noisy, search_radius=3, patch_radius=1)
+    assert target.shape == noisy.shape
+    assert torch.isfinite(target).all()
+
+
+def test_similarity_target_picks_from_image_values():
+    # Every output value must be an actual pixel drawn from the search window,
+    # never the pixel itself for a constant-plus-unique-center image.
+    noisy = torch.zeros(1, 1, 8, 8)
+    noisy[0, 0, 4, 4] = 5.0  # a lone outlier
+    target = make_similarity_target(noisy, search_radius=2, patch_radius=0, num_similar=1)
+    # the outlier's best match is a (different) background pixel -> 0, not 5
+    assert target[0, 0, 4, 4].item() == 0.0
+
+
+def test_similarity_target_num_similar_averages():
+    noisy = torch.rand(1, 1, 16, 16)
+    t1 = make_similarity_target(noisy, search_radius=3, num_similar=1)
+    t4 = make_similarity_target(noisy, search_radius=3, num_similar=4)
+    assert t1.shape == t4.shape
+    # averaging more matches generally changes (smooths) the target
+    assert not torch.equal(t1, t4)
+
+
+def test_n2sim_loss_runs_and_backprops():
+    model = REDCNN(num_filters=8)
+    low = torch.rand(2, 1, 32, 32)
+    loss = n2sim_training_step(model, low, search_radius=3)
+    assert loss.ndim == 0
+    assert loss.requires_grad
+    loss.backward()
+    assert any(p.grad is not None for p in model.parameters())
+
+
+def test_n2sim_works_on_small_patch():
+    model = REDCNN(num_filters=4)
+    loss = n2sim_training_step(model, torch.rand(1, 1, 8, 8), search_radius=2)
+    loss.backward()  # must not raise
+
+
 # ----- Zero-Shot Noise2Noise -----
 
 def test_pair_downsampler_halves_resolution():
@@ -98,4 +147,40 @@ def test_denoise_image_handles_odd_dims():
     noisy = torch.rand(1, 1, 31, 33)
     out = denoise_image(noisy, num_iters=5, num_channels=4)
     # odd dims cropped to even before downsampling
+    assert out.shape == (1, 1, 30, 32)
+
+
+# ----- Filter2Noise (attention-guided bilateral filtering) -----
+
+def test_attention_bilateral_filter_preserves_shape():
+    f = AttentionBilateralFilter(radius=2, num_channels=4)
+    x = torch.rand(2, 1, 24, 24)
+    out = f(x)
+    assert out.shape == x.shape
+    assert torch.isfinite(out).all()
+
+
+def test_filter2noise_network_stacks_and_backprops():
+    net = Filter2NoiseNetwork(num_layers=2, radius=2, num_channels=4)
+    x = torch.rand(1, 1, 32, 32)
+    loss = zsn2n_loss(net, x)
+    assert loss.ndim == 0
+    loss.backward()
+    assert any(p.grad is not None for p in net.parameters())
+
+
+def test_denoise_image_f2n_reduces_noise():
+    g = torch.Generator().manual_seed(0)
+    clean = torch.zeros(1, 1, 32, 32)
+    clean[..., 8:24, 8:24] = 1.0
+    noisy = (clean + 0.2 * torch.randn(1, 1, 32, 32, generator=g)).clamp(0.0, 1.0)
+    out = denoise_image_f2n(noisy, num_iters=200, num_layers=2, radius=2, num_channels=8, seed=0)
+    assert out.shape == noisy.shape
+    assert torch.isfinite(out).all()
+    assert ((out - clean) ** 2).mean() < ((noisy - clean) ** 2).mean()
+
+
+def test_denoise_image_f2n_handles_odd_dims():
+    noisy = torch.rand(1, 1, 31, 33)
+    out = denoise_image_f2n(noisy, num_iters=5, num_layers=1, radius=2, num_channels=4)
     assert out.shape == (1, 1, 30, 32)

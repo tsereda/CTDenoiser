@@ -8,13 +8,13 @@ project: ctdenoiser-sweep
 # ctdenoiser.train. Parameter keys use hyphens so W&B's ${args} macro emits the
 # exact CLI flags argparse expects (e.g. --training-mode, --n2v-mask-fraction).
 #
-# Two combinations in this grid are special-cased by train.py:
-#   * flowmatching + n2v  -> rejected (flow matching needs paired clean targets);
-#                            that single run fails fast and can be ignored.
-#   * zsn2n (any model)   -> trains a fresh per-image net and ignores --model,
-#                            so the 5 zsn2n runs are equivalent.
+# Some combinations in this grid are special-cased by train.py:
+#   * flowmatching + n2v/n2sim -> rejected (flow matching needs paired clean
+#                            targets); those runs fail fast and can be ignored.
+#   * zsn2n / f2n (any model) -> train a fresh per-image net and ignore --model,
+#                            so the 5 runs per per-image mode are equivalent.
 parameters:
-  # Core architectures (used by supervised / n2v; ignored by zsn2n).
+  # Core architectures (used by supervised / n2v / n2sim; ignored by zsn2n / f2n).
   model:
     values:
       - redcnn
@@ -28,7 +28,9 @@ parameters:
     values:
       - supervised   # clean-target MSE / flow-matching loss
       - n2v          # Noise2Void blind-spot self-supervision
+      - n2sim        # Noise2Sim similarity-based self-supervision
       - zsn2n        # Zero-Shot Noise2Noise per-image test-time training
+      - f2n          # Filter2Noise per-image attention-guided bilateral filtering
 
   epochs:
     value: 50
@@ -40,12 +42,32 @@ parameters:
   n2v-neighbor-radius:
     value: 2
 
+  # Noise2Sim similarity-based self-supervision
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
   # Zero-Shot Noise2Noise per-image optimisation
   zsn2n-iters:
     value: 2000
   zsn2n-channels:
     value: 48
   zsn2n-lr:
+    value: 0.001
+
+  # Filter2Noise per-image attention-guided bilateral filtering
+  f2n-iters:
+    value: 1500
+  f2n-layers:
+    value: 2
+  f2n-radius:
+    value: 3
+  f2n-channels:
+    value: 16
+  f2n-lr:
     value: 0.001
 
   # Flow matching ODE sampling steps (flowmatching model only)
