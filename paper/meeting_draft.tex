@@ -1,0 +1,299 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{microtype}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  citecolor=blue!70!black,
+  urlcolor=blue!70!black,
+}
+
+% -----------------------------------------------------------------------
+\title{\textbf{CTDenoiser}: A Benchmark for Low-Dose CT Denoising\\
+       Across Supervised and Self-Supervised Regimes}
+
+\author{Tim Sereda}
+% -----------------------------------------------------------------------
+
+\begin{document}
+\maketitle
+
+% -----------------------------------------------------------------------
+\begin{abstract}
+Low-dose computed tomography (LDCT) denoising must contend with
+structured, spatially correlated noise that ordinary blind-spot
+self-supervision is not designed to handle.  We are building
+\textbf{CTDenoiser}, a benchmark and single data/training/inference harness
+for comparing denoisers across supervision regimes---fully
+\emph{supervised} training with paired full-dose targets,
+\emph{Noise2Void} blind-spot self-supervision, \emph{Noise2Sim}
+similarity-based self-supervision, and \emph{Zero-Shot Noise2Noise}
+(ZS-N2N) per-image test-time optimisation---reported with PSNR, SSIM, and
+RMSE alongside Gradient Magnitude Similarity Deviation (GMSD) and a Noise
+Power Spectrum ratio (NPS-ratio) that targets spurious high-frequency
+texture.  This is an interim report.  Results so far cover the RED-CNN
+backbone across three regimes on a subset of the TCIA
+LDCT-and-Projection-Data; the remaining architectures and self-supervised
+configurations are in progress.  We recently identified and fixed an
+evaluation bug in overlapped full-slice inference that zeroed each slice's
+outer border and so biased reconstruction metrics against \emph{every}
+trained model; the numbers below predate that fix and are being
+regenerated.  Even under the biased harness, the structural-similarity
+ordering across methods is sensible and supervised RED-CNN already improves
+SSIM over the noisy input.
+\end{abstract}
+
+% -----------------------------------------------------------------------
+\section{Introduction}
+Reducing X-ray exposure lowers patient radiation dose~\cite{brenner2007computed}
+but raises image noise that is spatially correlated by the reconstruction
+process, unlike the pixel-independent noise assumed by many learned
+denoisers.  Our goal is a reproducible benchmark that places supervised,
+self-supervised, and zero-shot denoisers on common footing---identical
+data splits, preprocessing, training budget, full-slice inference, and
+metrics---so that differences reflect the methods rather than the harness.
+We build on the public TCIA LDCT-and-Projection-Data
+collection~\cite{moen2021low}.
+
+% -----------------------------------------------------------------------
+\section{Related Work}
+
+\paragraph{CNN-based denoisers.}
+RED-CNN~\cite{chen2017lowdose} introduced a residual encoder-decoder with
+multi-level skip connections and remains a standard baseline.
+DnCNN~\cite{zhang2017beyond} showed that a flat stack of Conv-BN-ReLU
+layers predicting the residual (noise) transfers well across denoising
+tasks.
+
+\paragraph{Transformer and generative denoisers.}
+CTformer~\cite{wang2022ctformer} applies a U-shaped transformer with
+Token2Token dilation to capture long-range structure at reduced memory
+cost.  Score-based diffusion~\cite{song2021scorebased,gao2023corediff}
+can yield perceptually strong results but needs many neural function
+evaluations; conditional flow matching~\cite{lipman2022flow,albergo2022building}
+learns near-straight transport paths and cuts this to tens of steps.  These
+sit on our roadmap but are not yet evaluated here.
+
+\paragraph{Self-supervised and zero-shot denoisers.}
+When paired full-dose targets are unavailable, denoisers can train from
+noisy data alone.  Noise2Noise~\cite{lehtinen2018noise2noise} maps between
+two noisy observations of a scene; Noise2Void~\cite{krull2019noise2void}
+removes the second observation via a blind-spot scheme but assumes
+pixel-wise \emph{independent} noise---an assumption CT violates.  Two lines
+of work target correlated noise directly:
+Noise2Sim~\cite{niu2020noise2sim} maps between centre pixels of
+self-similar non-local patches, and Zero-Shot Noise2Noise
+(ZS-N2N)~\cite{mansour2023zsn2n} trains a tiny per-image network from a
+downsampled Noise2Noise pair with no external data.  More recently,
+Filter2Noise~\cite{sun2025filter2noise} couples single-image
+self-supervision with an interpretable attention-guided bilateral filter
+for LDCT.  Our harness includes Noise2Void and ZS-N2N as blind-spot and
+zero-shot baselines and adds Noise2Sim as the correlated-noise-aware
+extension; Filter2Noise is integrated and currently running.
+
+\paragraph{Evaluation metrics.}
+PSNR and SSIM~\cite{wang2004image} favour pixel-level fidelity and can
+penalise plausible-but-incorrect high-frequency detail.  We complement
+them with GMSD~\cite{xue2014gradient} as an efficient perceptual proxy and
+an NPS-ratio inspired by noise-texture
+characterisation~\cite{solomon2012characterization} to flag spurious
+residual texture; LPIPS~\cite{zhang2018unreasonable} is a planned addition.
+
+% -----------------------------------------------------------------------
+\section{Methods}
+
+\paragraph{Data and preprocessing.}
+We use a subset of the TCIA LDCT-and-Projection-Data~\cite{moen2021low}
+with a patient-level split (seed 0): 10 training patients
+($6{,}683$ slices) and a held-out validation set ($1{,}476$ slices).
+HU values are windowed to $[0,1]$ by $\mathrm{clip}((\mathrm{HU}+b)/s)$
+with a fixed anatomy preset.
+
+\paragraph{Architectures and supervision.}
+The harness supports RED-CNN, DnCNN, U-Net, CTformer, and a conditional
+flow-matching model, trained under five modes---supervised, Noise2Void,
+Noise2Sim, ZS-N2N, and Filter2Noise.  The results below report the RED-CNN
+backbone; the remaining architectures are queued in the same sweep.
+
+\paragraph{Inference and evaluation.}
+Trained models are applied to full slices by overlapped tiling.  We score
+every model against an identity ``do-nothing'' baseline (the noisy input)
+so each row is read as a gain over that floor.
+
+\paragraph{Evaluation fix (in progress).}
+We found that the overlapped-tiling routine discarded a fixed margin from
+\emph{every} patch, including patches at the image edge, leaving the outer
+border of each output slice at zero.  Because the identity baseline does
+not pass through this routine, the artefact penalised only the trained
+models and biased their PSNR/RMSE pessimistically.  The fix retains the
+margin on sides that touch the image edge; runs are being regenerated.
+\textbf{Table~\ref{tab:results} predates this fix.}
+
+% -----------------------------------------------------------------------
+\section{Preliminary Results}
+
+\begin{table*}[t]
+  \centering
+  \caption{\emph{Preliminary} validation results on a TCIA
+           LDCT-and-Projection-Data subset (patient-level split, seed 0;
+           RED-CNN backbone, 10 training epochs).  Means over the
+           validation set on full slices via overlapped tiling.
+           $\uparrow$/$\downarrow$: higher/lower is better.  \emph{LDCT
+           input} is the noisy scan with no denoising (identity baseline).
+           \textbf{Bold}: best denoiser per metric.}
+  \label{tab:results}
+  \begin{tabular}{llrccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
+    PSNR\,$\uparrow$ & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
+    \midrule
+    LDCT input & --- (no denoising) & --- & 31.44 & 0.893 & 0.0274 & 0.166 & 0.0079 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Supervised & $1.85\mathrm{M}$ & \textbf{27.99} & \textbf{0.924} & \textbf{0.0408} & 0.200 & \textbf{0.0179} \\
+    RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 27.28 & 0.896 & 0.0441 & \textbf{0.179} & 0.0208 \\
+    RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & 26.95 & 0.882 & 0.0457 & 0.195 & 0.0222 \\
+    \bottomrule
+  \end{tabular}
+  \smallskip\\
+  \footnotesize{These numbers predate the overlapped-inference border fix
+  (Sec.~3) and are therefore biased pessimistically on PSNR/RMSE; a
+  corrected re-run is in progress.  Each row is a single run at seed 0;
+  per-patient and multi-seed standard deviations, and the remaining
+  architectures (DnCNN, U-Net, CTformer, CFM) and regimes (ZS-N2N,
+  Filter2Noise), will be added as runs complete.}
+\end{table*}
+
+What we can say already, with the caveat that the absolute PSNR/RMSE values
+are biased by the border artefact: (i)~the supervised RED-CNN improves SSIM
+over the noisy input ($0.924$ vs.\ $0.893$), so it is genuinely recovering
+structure rather than merely smoothing; (ii)~across regimes the ordering is
+the expected one---supervised $>$ Noise2Sim $>$ Noise2Void on SSIM, with
+the correlated-noise-aware Noise2Sim ahead of the blind-spot Noise2Void;
+and (iii)~the low-dose input here is already close to full-dose
+(baseline PSNR $31.4$, RMSE $2.7\%$), a high floor that makes pixel-level
+gains hard and motivates the perceptual GMSD/NPS metrics.  We will revisit
+all absolute claims once the corrected harness has re-run.
+
+% -----------------------------------------------------------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+\bibitem{brenner2007computed}
+D.~J. Brenner and E.~J. Hall.
+\newblock Computed tomography---an increasing source of radiation exposure.
+\newblock \emph{New England Journal of Medicine}, 357(22):2277--2284, 2007.
+
+\bibitem{chen2017lowdose}
+H.~Chen, Y.~Zhang, M.~K. Kalra, F.~Lin, Y.~Chen, P.~Liao, J.~Zhou, and
+  G.~Wang.
+\newblock Low-dose {CT} with a residual encoder-decoder convolutional neural
+  network.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 36(12):2524--2535, 2017.
+
+\bibitem{zhang2017beyond}
+K.~Zhang, W.~Zuo, Y.~Chen, D.~Meng, and L.~Zhang.
+\newblock Beyond a {G}aussian denoiser: Residual learning of deep {CNN} for
+  image denoising.
+\newblock \emph{IEEE Transactions on Image Processing}, 26(7):3142--3155, 2017.
+
+\bibitem{wang2022ctformer}
+C.~Wang, S.~Shang, H.~Zhang, Q.~Li, and S.~K. Zhou.
+\newblock {CTformer}: Convolution-free token2token dilated faster self-attention
+  for {CT} image denoising.
+\newblock \emph{Physics in Medicine \& Biology}, 68(6):065012, 2023.
+
+\bibitem{moen2021low}
+T.~R. Moen, B.~Chen, D.~R. Holmes, X.~Duan, Z.~Yu, L.~Yu, S.~Leng,
+  J.~G. Fletcher, and C.~H. McCollough.
+\newblock Low-dose {CT} image and projection data.
+\newblock \emph{Medical Physics}, 48(2):902--911, 2021.
+
+\bibitem{song2021scorebased}
+Y.~Song, J.~Sohl-Dickstein, D.~P. Kingma, A.~Kumar, S.~Ermon, and B.~Poole.
+\newblock Score-based generative modeling through stochastic differential
+  equations.
+\newblock In \emph{International Conference on Learning Representations}, 2021.
+
+\bibitem{gao2023corediff}
+Q.~Gao, F.~Li, Y.~Zhang, Y.~Wang, X.~Hu, P.~Liu, W.~Zheng, H.~Chen, and
+  S.~Li.
+\newblock {CoreDiff}: Contextual error-modulated generalized diffusion model for
+  low-dose {CT} denoising and generalization.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 43(2):745--759, 2024.
+
+\bibitem{lipman2022flow}
+Y.~Lipman, R.~T.~Q. Chen, H.~Ben-Hamu, M.~Nickel, and M.~Le.
+\newblock Flow matching for generative modeling.
+\newblock In \emph{International Conference on Learning Representations}, 2023.
+
+\bibitem{albergo2022building}
+M.~S. Albergo and E.~Vanden-Eijnden.
+\newblock Building normalizing flows with stochastic interpolants.
+\newblock In \emph{International Conference on Learning Representations}, 2023.
+
+\bibitem{lehtinen2018noise2noise}
+J.~Lehtinen, J.~Munkberg, J.~Hasselgren, S.~Laine, T.~Karras, M.~Aittala,
+  and T.~Aila.
+\newblock {Noise2Noise}: Learning image restoration without clean data.
+\newblock In \emph{International Conference on Machine Learning}, 2018.
+
+\bibitem{krull2019noise2void}
+A.~Krull, T.-O. Buchholz, and F.~Jug.
+\newblock {Noise2Void}---learning denoising from single noisy images.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2019.
+
+\bibitem{niu2020noise2sim}
+C.~Niu and G.~Wang.
+\newblock {Noise2Sim}---similarity-based self-learning for image denoising.
+\newblock \emph{arXiv preprint arXiv:2011.03384}, 2020.
+
+\bibitem{mansour2023zsn2n}
+Y.~Mansour and R.~Heckel.
+\newblock Zero-shot {Noise2Noise}: Efficient image denoising without any data.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2023.
+
+\bibitem{sun2025filter2noise}
+Y.~Sun, L.-S. Schneider, M.~Gu, S.~Mei, C.~Ye, F.~Wagner, S.~Bayer, and
+  A.~Maier.
+\newblock {Filter2Noise}: Interpretable self-supervised single-image denoising
+  for low-dose {CT} with attention-guided bilateral filtering.
+\newblock \emph{arXiv preprint arXiv:2504.13519}, 2025.
+
+\bibitem{wang2004image}
+Z.~Wang, A.~C. Bovik, H.~R. Sheikh, and E.~P. Simoncelli.
+\newblock Image quality assessment: From error visibility to structural
+  similarity.
+\newblock \emph{IEEE Transactions on Image Processing}, 13(4):600--612, 2004.
+
+\bibitem{xue2014gradient}
+W.~Xue, L.~Zhang, X.~Mou, and A.~C. Bovik.
+\newblock Gradient magnitude similarity deviation: A highly efficient perceptual
+  image quality index.
+\newblock \emph{IEEE Transactions on Image Processing}, 23(2):684--695, 2014.
+
+\bibitem{zhang2018unreasonable}
+R.~Zhang, P.~Isola, A.~A. Efros, E.~Shechtman, and O.~Wang.
+\newblock The unreasonable effectiveness of deep features as a perceptual
+  metric.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2018.
+
+\bibitem{solomon2012characterization}
+J.~B. Solomon, O.~Christianson, and E.~Samei.
+\newblock Quantitative comparison of noise texture across {CT} scanners from
+  different manufacturers.
+\newblock \emph{Medical Physics}, 39(10):6048--6055, 2012.
+
+\end{thebibliography}
+
+\end{document}
