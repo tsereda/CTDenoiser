@@ -33,9 +33,19 @@ def overlapped_inference(model, full_img, patch_size=64, margin=16):
         for x in _stops(W, patch_size, stride):
             patch = full_img[:, :, y : y + patch_size, x : x + patch_size]
             denoised = model(patch)
-            center = denoised[:, :, margin:-margin, margin:-margin]
-            ys, ye = y + margin, y + patch_size - margin
-            xs, xe = x + margin, x + patch_size - margin
+            # Discard the margin only on sides that abut another patch; keep it
+            # against the image edge so the outer border is not dropped to zero.
+            top = margin if y > 0 else 0
+            left = margin if x > 0 else 0
+            bottom = margin if y + patch_size < H else 0
+            right = margin if x + patch_size < W else 0
+            center = denoised[
+                :, :,
+                top : patch_size - bottom,
+                left : patch_size - right,
+            ]
+            ys, ye = y + top, y + patch_size - bottom
+            xs, xe = x + left, x + patch_size - right
             out_img[:, :, ys:ye, xs:xe] += center
             weight_map[:, :, ys:ye, xs:xe] += 1.0
 

@@ -28,6 +28,15 @@ def test_overlapped_inference_shape_and_coverage():
     assert torch.isfinite(out).all()
 
 
+def test_overlapped_inference_covers_border():
+    """An identity model must reproduce the input everywhere, including the
+    outer margin frame — regression for the dropped-border bug."""
+    identity = torch.nn.Identity()
+    img = torch.randn(1, 1, 128, 192)
+    out = overlapped_inference(identity, img, patch_size=64, margin=16)
+    assert torch.allclose(out, img, atol=1e-5)
+
+
 def test_dncnn_preserves_shape():
     model = DnCNN(num_filters=16, num_layers=5)
     x = torch.randn(2, 1, 64, 64)
