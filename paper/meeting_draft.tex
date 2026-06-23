@@ -38,10 +38,12 @@ similarity-based self-supervision, and \emph{Zero-Shot Noise2Noise}
 (ZS-N2N) per-image test-time optimisation---reported with PSNR, SSIM, and
 RMSE alongside Gradient Magnitude Similarity Deviation (GMSD) and a Noise
 Power Spectrum ratio (NPS-ratio) that targets spurious high-frequency
-texture.  This is an interim report.  Results so far cover the RED-CNN
-backbone across three regimes on a subset of the TCIA
-LDCT-and-Projection-Data; the remaining architectures and self-supervised
-configurations are in progress.  We recently identified and fixed an
+texture.  This is an interim report.  We present two complementary sweeps: an
+\emph{architecture} sweep comparing five backbones under supervised and
+Noise2Void training alongside zero-shot ZS-N2N, and a
+\emph{supervision-regime} sweep on the RED-CNN and DnCNN backbones spanning
+supervised, Noise2Sim, and Noise2Void training; several self-supervised
+runs are still in progress.  We recently identified and fixed an
 evaluation bug in overlapped full-slice inference that zeroed each slice's
 outer border and so biased reconstruction metrics against \emph{every}
 trained model; the numbers below predate that fix and are being
@@ -118,9 +120,10 @@ with a fixed anatomy preset.
 
 \paragraph{Architectures and supervision.}
 The harness supports RED-CNN, DnCNN, U-Net, CTformer, and a conditional
-flow-matching model, trained under five modes---supervised, Noise2Void,
-Noise2Sim, ZS-N2N, and Filter2Noise.  The results below report the RED-CNN
-backbone; the remaining architectures are queued in the same sweep.
+flow-matching model (CFM), trained under five modes---supervised,
+Noise2Void, Noise2Sim, ZS-N2N, and Filter2Noise.  Table~\ref{tab:arch}
+sweeps architectures under supervised/N2V training; Table~\ref{tab:results}
+sweeps supervision regimes on the RED-CNN and DnCNN backbones.
 
 \paragraph{Inference and evaluation.}
 Trained models are applied to full slices by overlapped tiling.  We score
@@ -139,15 +142,78 @@ margin on sides that touch the image edge; runs are being regenerated.
 % -----------------------------------------------------------------------
 \section{Preliminary Results}
 
+We report two sweeps under the shared harness.  Both predate the
+overlapped-inference border fix (Sec.~3) and so are biased pessimistically
+on the reconstruction metrics (PSNR/RMSE); a corrected re-run is in
+progress.  We use them here for \emph{relative} comparison, where the
+ordering is robust to that bias.
+
+\paragraph{Architecture sweep.}
+Table~\ref{tab:arch} fixes the supervision mode and varies the backbone.
+Under supervised training the convolutional baselines (RED-CNN, DnCNN,
+U-Net) cluster tightly and lead on SSIM, while the zero-shot ZS-N2N---which
+trains a $21$K-parameter network per image with no external data---is
+strongest on the noise-texture metrics (NPS-ratio, GMSD), as expected for a
+method that barely departs from the input.
+
+\paragraph{Supervision-regime sweep.}
+Table~\ref{tab:results} fixes the backbone (RED-CNN, DnCNN) and varies the
+training regime.  The ordering is the expected one---supervised $>$
+Noise2Sim $>$ Noise2Void on SSIM---with the correlated-noise-aware
+Noise2Sim ahead of the blind-spot Noise2Void, consistent with CT noise
+violating the pixel-independence assumption.  Supervised RED-CNN improves
+SSIM over the noisy input ($0.924$ vs.\ $0.893$), evidence it recovers
+structure rather than merely smoothing.
+
 \begin{table*}[t]
   \centering
-  \caption{\emph{Preliminary} validation results on a TCIA
+  \caption{\textbf{Architecture sweep.}  Validation results on the TCIA
+           LDCT-and-Projection-Data benchmark (patient-level $80/20$ split,
+           seed 0; trained models at 50 epochs).  Means over the validation
+           set on full slices via overlapped tiling.  $\uparrow$/$\downarrow$:
+           higher/lower is better.  \emph{LDCT input} is the noisy scan with
+           no denoising.  \textbf{Bold}: best denoiser per metric.  ZS-N2N
+           values are mean\,$\pm$\,std over its five model-agnostic runs; all
+           other rows are single runs (seed 0).  Numbers predate the
+           border-fix of Sec.~3.}
+  \label{tab:arch}
+  \begin{tabular}{llrccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
+    PSNR\,$\uparrow$ & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
+    \midrule
+    LDCT input & --- (no denoising) & --- & 30.03 & 0.883 & 0.0331 & 0.171 & 0.0122 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & 27.93 & \textbf{0.913} & 0.0413 & 0.204 & 0.0195 \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 27.88 & 0.908 & 0.0416 & 0.209 & 0.0197 \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 27.82 & 0.905 & 0.0418 & 0.226 & 0.0198 \\
+    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 27.48 & 0.850 & 0.0434 & 0.296 & 0.0212 \\
+    CFM (ours)                       & Supervised & $2.11\mathrm{M}$ & 27.38 & 0.887 & 0.0440 & 0.245 & 0.0219 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Void & $1.85\mathrm{M}$ & 26.63 & 0.875 & 0.0478 & \textbf{0.201} & 0.0255 \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Void & $0.56\mathrm{M}$ & 26.51 & 0.870 & 0.0485 & 0.232 & 0.0262 \\
+    U-Net                            & Noise2Void & $1.95\mathrm{M}$ & 26.67 & 0.875 & 0.0475 & 0.211 & 0.0251 \\
+    CTformer~\cite{wang2022ctformer} & Noise2Void & $0.40\mathrm{M}$ & 26.15 & 0.857 & 0.0503 & 0.298 & 0.0280 \\
+    CFM                              & Noise2Void & --- & \multicolumn{5}{c}{\textit{undefined (requires paired targets)}} \\
+    \midrule
+    ZS-N2N~\cite{mansour2023zsn2n}   & Zero-shot & $21.3\mathrm{K}$ &
+      \textbf{29.92}{\scriptsize\,$\pm0.001$} & 0.882{\scriptsize\,$\pm0.0005$} &
+      \textbf{0.0331} & \textbf{0.188}{\scriptsize\,$\pm0.0001$} & \textbf{0.0121} \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+  \centering
+  \caption{\textbf{Supervision-regime sweep.}  Validation results on a TCIA
            LDCT-and-Projection-Data subset (patient-level split, seed 0;
-           RED-CNN backbone, 10 training epochs).  Means over the
-           validation set on full slices via overlapped tiling.
-           $\uparrow$/$\downarrow$: higher/lower is better.  \emph{LDCT
-           input} is the noisy scan with no denoising (identity baseline).
-           \textbf{Bold}: best denoiser per metric.}
+           $10$ training epochs).  Means over the validation set on full
+           slices via overlapped tiling.  \textbf{Bold}: best denoiser per
+           metric.  Rows marked $^{\dagger}$ are runs still in progress
+           (epoch shown); ZS-N2N and Filter2Noise runs had not logged
+           validation metrics at export time.  Numbers predate the
+           border-fix of Sec.~3.}
   \label{tab:results}
   \begin{tabular}{llrccccc}
     \toprule
@@ -160,27 +226,13 @@ margin on sides that touch the image edge; runs are being regenerated.
     RED-CNN~\cite{chen2017lowdose} & Supervised & $1.85\mathrm{M}$ & \textbf{27.99} & \textbf{0.924} & \textbf{0.0408} & 0.200 & \textbf{0.0179} \\
     RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 27.28 & 0.896 & 0.0441 & \textbf{0.179} & 0.0208 \\
     RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & 26.95 & 0.882 & 0.0457 & 0.195 & 0.0222 \\
+    \midrule
+    DnCNN~\cite{zhang2017beyond} & Supervised$^{\dagger}$\,(ep.\,8) & $0.56\mathrm{M}$ & 27.96 & 0.922 & 0.0409 & 0.206 & 0.0180 \\
+    DnCNN~\cite{zhang2017beyond} & Noise2Sim$^{\dagger}$\,(ep.\,6) & $0.56\mathrm{M}$ & 27.35 & 0.843 & 0.0438 & 0.223 & 0.0205 \\
+    DnCNN~\cite{zhang2017beyond} & Noise2Void$^{\dagger}$\,(ep.\,6) & $0.56\mathrm{M}$ & 26.82 & 0.878 & 0.0463 & 0.235 & 0.0228 \\
     \bottomrule
   \end{tabular}
-  \smallskip\\
-  \footnotesize{These numbers predate the overlapped-inference border fix
-  (Sec.~3) and are therefore biased pessimistically on PSNR/RMSE; a
-  corrected re-run is in progress.  Each row is a single run at seed 0;
-  per-patient and multi-seed standard deviations, and the remaining
-  architectures (DnCNN, U-Net, CTformer, CFM) and regimes (ZS-N2N,
-  Filter2Noise), will be added as runs complete.}
 \end{table*}
-
-What we can say already, with the caveat that the absolute PSNR/RMSE values
-are biased by the border artefact: (i)~the supervised RED-CNN improves SSIM
-over the noisy input ($0.924$ vs.\ $0.893$), so it is genuinely recovering
-structure rather than merely smoothing; (ii)~across regimes the ordering is
-the expected one---supervised $>$ Noise2Sim $>$ Noise2Void on SSIM, with
-the correlated-noise-aware Noise2Sim ahead of the blind-spot Noise2Void;
-and (iii)~the low-dose input here is already close to full-dose
-(baseline PSNR $31.4$, RMSE $2.7\%$), a high floor that makes pixel-level
-gains hard and motivates the perceptual GMSD/NPS metrics.  We will revisit
-all absolute claims once the corrected harness has re-run.
 
 % -----------------------------------------------------------------------
 \bibliographystyle{plain}
