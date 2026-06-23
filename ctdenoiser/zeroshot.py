@@ -116,3 +116,135 @@ def denoise_image(
     with torch.no_grad():
         out = model(noisy).clamp(0.0, 1.0)
     return out
+
+
+# ----------------------------------------------------------------------------
+# Filter2Noise: attention-guided bilateral filtering (single-image, data-free)
+#
+# Reference: Sun, Wang et al., "Filter2Noise: Interpretable Single-Image
+# Denoising with Attention-Guided Bilateral Filtering", arXiv 2504.xxxx (2025),
+# demonstrated on low-dose CT.
+#
+# Rather than a black-box conv net, Filter2Noise learns the *parameters* of a
+# classical bilateral filter: a tiny attention module predicts spatially varying
+# spatial (sigma_x, sigma_y) and range (sigma_r) widths per pixel, and one or
+# more such filters are stacked. This makes the denoiser interpretable (the
+# learned sigma maps show where/how strongly it smooths) and extremely small.
+#
+# Like ZS-N2N it is trained per image with the same self-supervised pair-
+# downsampler loss (:func:`zsn2n_loss`), so it needs no clean target, no noise
+# model, and no external data, and is discarded after denoising the image.
+# ----------------------------------------------------------------------------
+
+class AttentionBilateralFilter(nn.Module):
+    """One attention-guided bilateral filter.
+
+    A small conv "attention" net predicts three positive maps per pixel --
+    spatial widths ``sigma_x``, ``sigma_y`` and range width ``sigma_r`` -- which
+    parameterise a bilateral filter over a ``(2*radius+1)`` window. Output is the
+    range/space-weighted average of the neighbourhood, computed differentiably so
+    the predictor trains end-to-end through the filter.
+    """
+
+    def __init__(self, radius=3, num_channels=16):
+        super().__init__()
+        self.radius = radius
+        self.param_net = nn.Sequential(
+            nn.Conv2d(1, num_channels, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_channels, num_channels, 1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_channels, 3, 1),
+        )
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        rad = self.radius
+        k = 2 * rad + 1
+
+        # Per-pixel filter widths, kept strictly positive.
+        params = F.softplus(self.param_net(x)) + 1e-3
+        sx = params[:, 0:1].unsqueeze(2)  # (B,1,1,H,W)
+        sy = params[:, 1:2].unsqueeze(2)
+        sr = params[:, 2:3].unsqueeze(2)
+
+        # Neighbourhood values: (B, C, k*k, H, W).
+        patches = F.unfold(
+            F.pad(x, (rad, rad, rad, rad), mode="reflect"), kernel_size=k
+        ).view(b, c, k * k, h, w)
+
+        # Spatial offsets matching F.unfold's row-major (kh, kw) ordering.
+        ys = torch.arange(-rad, rad + 1, device=x.device, dtype=x.dtype)
+        oy, ox = torch.meshgrid(ys, ys, indexing="ij")
+        oy = oy.reshape(1, 1, k * k, 1, 1)
+        ox = ox.reshape(1, 1, k * k, 1, 1)
+
+        spatial = torch.exp(-(ox ** 2) / (2 * sx ** 2) - (oy ** 2) / (2 * sy ** 2))
+        rng = torch.exp(-((patches - x.unsqueeze(2)) ** 2) / (2 * sr ** 2))
+        weight = spatial * rng
+        return (weight * patches).sum(2) / (weight.sum(2) + 1e-8)
+
+
+class Filter2NoiseNetwork(nn.Module):
+    """A stack of :class:`AttentionBilateralFilter` modules (default 2).
+
+    Each filter further denoises the previous output; stacking lets the model
+    apply progressively adapted smoothing while staying tiny and interpretable.
+    """
+
+    def __init__(self, num_layers=2, radius=3, num_channels=16):
+        super().__init__()
+        self.filters = nn.ModuleList(
+            [AttentionBilateralFilter(radius, num_channels) for _ in range(num_layers)]
+        )
+
+    def forward(self, x):
+        for f in self.filters:
+            x = f(x)
+        return x
+
+
+def denoise_image_f2n(
+    noisy,
+    num_iters=1500,
+    lr=1e-3,
+    num_layers=2,
+    radius=3,
+    num_channels=16,
+    device=None,
+    seed=0,
+):
+    """Train a fresh :class:`Filter2NoiseNetwork` on the single image ``noisy``
+    and return the denoised result clamped to ``[0, 1]``.
+
+    ``noisy`` is ``(1, 1, H, W)`` (or batch size 1). Odd spatial dimensions are
+    cropped to even before the pair-downsampler loss. The network is
+    self-contained: it has no external data and is not checkpointed.
+    """
+    device = device or noisy.device
+    noisy = noisy.to(device)
+
+    # pair_downsampler (used by zsn2n_loss) needs even H, W.
+    _, _, h, w = noisy.shape
+    noisy = noisy[:, :, : h - (h % 2), : w - (w % 2)]
+
+    # Reproducible weight init without disturbing the global RNG stream.
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(seed)
+        model = Filter2NoiseNetwork(
+            num_layers=num_layers, radius=radius, num_channels=num_channels
+        ).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    model.train()
+    for _ in range(num_iters):
+        optimizer.zero_grad()
+        loss = zsn2n_loss(model, noisy)  # same self-supervised pair-downsampler loss
+        loss.backward()
+        optimizer.step()
+
+    model.eval()
+    with torch.no_grad():
+        out = model(noisy).clamp(0.0, 1.0)
+    return out

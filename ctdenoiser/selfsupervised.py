@@ -96,3 +96,86 @@ def n2v_training_step(
     )
     pred = model(masked_input)
     return F.mse_loss(pred[mask], noisy[mask])
+
+
+# ----------------------------------------------------------------------------
+# Noise2Sim: similarity-based self-supervision
+#
+# Reference: Niu, Gao, Yu, Wang, "Noise2Sim - Similarity-based Self-Learning for
+# Image Denoising", arXiv 2011.03384 / ICML 2021 workshop.
+#
+# Instead of a blind spot, Noise2Sim exploits non-local self-similarity: for
+# each pixel it searches the image for a *similar* pixel (matched on the patch
+# around it) and uses that pixel's value as the regression target. Two pixels
+# that share the same underlying signal but carry statistically independent
+# noise form a Noise2Noise pair, so regressing the full noisy image onto this
+# per-pixel "similar" image drives the network to the clean signal.
+#
+# Unlike N2V, the model sees the *un-masked* noisy image: it cannot cheat by
+# copying the input because the target is a different pixel whose noise is
+# independent, so the MSE optimum is the conditional mean (the signal). This
+# avoids N2V's blind-spot information loss while still needing no clean target.
+# ----------------------------------------------------------------------------
+
+@torch.no_grad()
+def make_similarity_target(noisy, search_radius=4, patch_radius=1, num_similar=1):
+    """Build the per-pixel similarity target for Noise2Sim.
+
+    For every pixel of ``noisy`` ``(B, 1, H, W)`` we scan all spatial offsets in
+    a ``(2*search_radius+1)`` window (excluding the pixel itself), score each
+    candidate by the mean squared patch difference over a
+    ``(2*patch_radius+1)`` neighbourhood, and replace the pixel by the average
+    of its ``num_similar`` best-matching candidate values. Returns a tensor of
+    the same shape as ``noisy``.
+
+    Fully vectorised: borders use refl/replicate padding so every pixel has a
+    full candidate set, and the patch distance uses an average pool with
+    ``count_include_pad=False`` so edge patches are scored fairly.
+    """
+    b, c, h, w = noisy.shape
+    r, pr = search_radius, patch_radius
+    padded = F.pad(noisy, (r, r, r, r), mode="replicate")
+
+    dists, vals = [], []
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dy == 0 and dx == 0:
+                continue  # exclude self so the target is a *different* pixel
+            shifted = padded[:, :, r + dy : r + dy + h, r + dx : r + dx + w]
+            sq = (noisy - shifted) ** 2
+            dist = F.avg_pool2d(
+                sq, 2 * pr + 1, stride=1, padding=pr, count_include_pad=False
+            )
+            dists.append(dist)
+            vals.append(shifted)
+
+    dist_stack = torch.stack(dists, dim=0)  # (O, B, C, H, W)
+    val_stack = torch.stack(vals, dim=0)
+    k = min(num_similar, dist_stack.shape[0])
+    # k smallest patch distances per pixel -> gather their pixel values, average.
+    idx = dist_stack.topk(k, dim=0, largest=False).indices
+    chosen = torch.gather(val_stack, 0, idx)
+    return chosen.mean(dim=0)
+
+
+def n2sim_training_step(
+    model,
+    noisy,
+    search_radius=4,
+    patch_radius=1,
+    num_similar=1,
+):
+    """Compute the Noise2Sim similarity loss for a batch of noisy images.
+
+    ``noisy`` is ``(B, 1, H, W)``. A per-pixel similarity target is built with
+    :func:`make_similarity_target` (no gradient) and the model regresses the
+    full noisy image onto it. Returns a differentiable scalar MSE.
+    """
+    target = make_similarity_target(
+        noisy,
+        search_radius=search_radius,
+        patch_radius=patch_radius,
+        num_similar=num_similar,
+    )
+    pred = model(noisy)
+    return F.mse_loss(pred, target)
