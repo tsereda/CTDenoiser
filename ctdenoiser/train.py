@@ -41,7 +41,7 @@ from .data.dataset import (
 )
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
-from .models import CTformer, DnCNN, FlowMatching, REDCNN, UNet
+from .models import CTformer, DnCNN, FlowMatching, REDCNN, SelfSupervisedFlow, UNet
 from .selfsupervised import n2sim_training_step, n2v_training_step
 from .zeroshot import denoise_image as zsn2n_denoise_image
 from .zeroshot import denoise_image_f2n as f2n_denoise_image
@@ -51,6 +51,7 @@ MODELS = {
     "dncnn": DnCNN,
     "flowmatching": FlowMatching,
     "redcnn": REDCNN,
+    "ssflow": SelfSupervisedFlow,
     "unet": UNet,
 }
 
@@ -376,13 +377,15 @@ def main(argv=None):
     parser.add_argument("--model", choices=MODELS, default="ctformer")
     parser.add_argument(
         "--training-mode",
-        choices=["supervised", "n2v", "n2sim", "zsn2n", "f2n"],
+        choices=["supervised", "n2v", "n2sim", "zsn2n", "f2n", "ssflow"],
         default="supervised",
         help="supervised: clean-target MSE/flow loss (default). "
              "n2v: Noise2Void blind-spot self-supervision (clean target ignored). "
              "n2sim: Noise2Sim similarity-based self-supervision (clean target ignored). "
              "zsn2n: per-image zero-shot test-time training (no shared model/checkpoint). "
-             "f2n: per-image Filter2Noise attention-guided bilateral filtering (no checkpoint).",
+             "f2n: per-image Filter2Noise attention-guided bilateral filtering (no checkpoint). "
+             "ssflow: self-supervised rectified flow on manufactured noisy pairs "
+             "(requires --model ssflow; clean target ignored).",
     )
     parser.add_argument("--n2v-mask-fraction", type=float, default=0.02,
                         help="fraction of pixels masked as blind spots (n2v)")
@@ -394,6 +397,20 @@ def main(argv=None):
                         help="patch radius used to score pixel similarity (n2sim)")
     parser.add_argument("--n2sim-num-similar", type=int, default=1,
                         help="number of best matches averaged into the target (n2sim)")
+    parser.add_argument("--ssflow-pairing", choices=["similarity", "downsample"],
+                        default="similarity",
+                        help="noisy-pair construction for ssflow: similarity "
+                             "(Noise2Sim-style non-local, correlated-noise-aware, v2) "
+                             "or downsample (Neighbor2Neighbor/ZS-N2N half-res, v1)")
+    parser.add_argument("--ssflow-search-radius", type=int, default=4,
+                        help="window radius searched for a similar patch (ssflow similarity)")
+    parser.add_argument("--ssflow-patch-radius", type=int, default=1,
+                        help="patch radius used to score similarity (ssflow)")
+    parser.add_argument("--ssflow-num-similar", type=int, default=1,
+                        help="number of best matches averaged into the paired view (ssflow)")
+    parser.add_argument("--ssflow-exclude-radius", type=int, default=2,
+                        help="exclude candidate offsets within this radius so the paired "
+                             "noise is decorrelated (ssflow; the correlated-noise knob)")
     parser.add_argument("--zsn2n-iters", type=int, default=2000,
                         help="per-image optimisation steps (zsn2n)")
     parser.add_argument("--zsn2n-channels", type=int, default=48,
@@ -451,6 +468,12 @@ def main(argv=None):
         parser.error(
             "flowmatching needs paired clean targets; it is incompatible with "
             f"--training-mode {args.training_mode}. Use --training-mode supervised."
+        )
+
+    if (args.model == "ssflow") != (args.training_mode == "ssflow"):
+        parser.error(
+            "--model ssflow and --training-mode ssflow must be used together: "
+            "the self-supervised flow has its own velocity network and loss."
         )
 
     # Resolve the HU window: --anatomy preset, with explicit --hu-offset/--hu-scale
@@ -525,6 +548,15 @@ def main(argv=None):
 
     if args.model == "flowmatching":
         model = FlowMatching(num_steps=args.flow_steps).to(device)
+    elif args.model == "ssflow":
+        model = SelfSupervisedFlow(
+            num_steps=args.flow_steps,
+            pairing=args.ssflow_pairing,
+            search_radius=args.ssflow_search_radius,
+            patch_radius=args.ssflow_patch_radius,
+            num_similar=args.ssflow_num_similar,
+            exclude_radius=args.ssflow_exclude_radius,
+        ).to(device)
     else:
         model = MODELS[args.model]().to(device)
 
@@ -562,6 +594,9 @@ def main(argv=None):
                     patch_radius=args.n2sim_patch_radius,
                     num_similar=args.n2sim_num_similar,
                 )
+            elif args.training_mode == "ssflow":
+                # Self-supervised rectified flow on manufactured noisy pairs.
+                loss = model.ss_flow_loss(low)
             elif hasattr(model, "flow_loss"):
                 loss = model.flow_loss(low, full.to(device))
             else:
