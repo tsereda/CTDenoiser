@@ -1,0 +1,66 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Ablation for the self-supervised rectified flow (ssflow).
+#
+# This is a *dedicated* sweep rather than part of sweep.yml: --model ssflow and
+# --training-mode ssflow must be used together (the flow has its own velocity
+# network and loss), so they are pinned here and only the two ablation axes vary.
+#
+# Axes (grid = 3 x 2 = 6 runs):
+#   * ssflow-exclude-radius: the correlated-noise knob. Candidate similarity
+#     matches within this radius of the query are skipped so the paired noise is
+#     decorrelated. r=1 keeps only the self-exclusion (Noise2Sim-like, assumes
+#     near-pixel independence); r=2,3 push matches beyond the FBP correlation
+#     length. The central test of the correlated-noise hypothesis.
+#   * flow-steps-eval: inference steps used for the *logged* metrics (every
+#     evaluate() overrides model.num_steps with this). 1 = one-step posterior
+#     mean (== similarity-based Noise2Noise regression); 4 = multi-step Euler
+#     refinement. Whether multi-step beats one-step is the method's headline
+#     question.
+parameters:
+  model:
+    value: ssflow
+  training-mode:
+    value: ssflow
+
+  epochs:
+    value: 50
+
+  # Noisy-pair construction: non-local self-similar patches (correlated-noise-aware).
+  ssflow-pairing:
+    value: similarity
+  ssflow-search-radius:
+    value: 4
+  ssflow-patch-radius:
+    value: 1
+  ssflow-num-similar:
+    value: 1
+
+  # --- ablation axis 1: correlated-noise decorrelation radius ---
+  ssflow-exclude-radius:
+    values:
+      - 1
+      - 2
+      - 3
+
+  # --- ablation axis 2: one-step posterior mean vs multi-step Euler refinement ---
+  # flow-steps is the model default; flow-steps-eval is what the logged metrics use.
+  flow-steps:
+    value: 1
+  flow-steps-eval:
+    values:
+      - 1
+      - 4
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --wandb-project=ctdenoiser-sweep
