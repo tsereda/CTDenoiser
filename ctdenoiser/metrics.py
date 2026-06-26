@@ -69,13 +69,118 @@ def gmsd(pred, target, c=1e-6):
     return gms.std().item()
 
 
-def nps_ratio(pred, target, eps=1e-8):
-    """Mean noise power spectrum ratio via 2-D FFT.
+def residual_spectrum(pred, target, eps=1e-8):
+    """Mean spectral energy of the residual relative to the reference.
 
-    Captures spatial-frequency distribution of residual error.
-    Lower is better; values near 0 indicate negligible residual energy.
+    Captures the spatial-frequency distribution of the *residual error*
+    ``pred - target`` via the 2-D FFT, normalised by the reference's spectral
+    energy. Lower is better; values near 0 indicate negligible residual energy.
+
+    Note: despite the historical name ``nps_ratio`` (kept as an alias for
+    backward-compatible logging), this is **not** a noise power spectrum — it is
+    a reference-relative residual spectrum, because it needs the clean target.
+    The genuine, reference-free noise power spectrum of an image (and its shape /
+    peak-frequency shift, the "waxy texture" radiologists distrust) is measured
+    by :func:`uniform_nps`.
     """
     residual = pred - target
     nps_res = torch.fft.fft2(residual).abs() ** 2
     nps_tgt = torch.fft.fft2(target).abs() ** 2
     return (nps_res.mean() / (nps_tgt.mean() + eps)).item()
+
+
+# Backward-compatible alias. Existing runs / CSVs / reports log this as
+# ``nps_ratio``; keep the name working but treat :func:`residual_spectrum` as
+# the honest one going forward (see docs/plan.md).
+nps_ratio = residual_spectrum
+
+
+def _radial_profile(power, n_bins=None):
+    """Azimuthally average a 2-D power map ``(H, W)`` into a radial profile.
+
+    The DC term sits at index 0 (assumes an ``fftshift``-ed, or here a
+    centred-frequency, map). Returns a 1-D tensor of length ``n_bins`` indexed by
+    increasing spatial frequency.
+    """
+    h, w = power.shape
+    cy, cx = h // 2, w // 2
+    yy, xx = torch.meshgrid(
+        torch.arange(h, device=power.device, dtype=torch.float32) - cy,
+        torch.arange(w, device=power.device, dtype=torch.float32) - cx,
+        indexing="ij",
+    )
+    r = torch.sqrt(yy ** 2 + xx ** 2)
+    n_bins = n_bins or int(r.max().item()) + 1
+    r_idx = r.round().long().clamp(max=n_bins - 1).reshape(-1)
+    flat = power.reshape(-1)
+    sums = torch.zeros(n_bins, device=power.device, dtype=power.dtype)
+    counts = torch.zeros(n_bins, device=power.device, dtype=power.dtype)
+    sums.scatter_add_(0, r_idx, flat)
+    counts.scatter_add_(0, r_idx, torch.ones_like(flat))
+    return sums / counts.clamp_min(1.0)
+
+
+def uniform_nps(image, rois, roi_size=64):
+    """Reference-free 2-D noise power spectrum, ensemble-averaged over flat ROIs.
+
+    Unlike :func:`residual_spectrum` this needs *no clean target*: it measures
+    the texture of the noise in the image itself, which is what reveals a
+    denoiser shifting power toward low frequencies (the blotchy / "waxy" look
+    that PSNR and SSIM are blind to).
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        ``(H, W)`` or ``(1, 1, H, W)`` slice.
+    rois : sequence[tuple[int, int]]
+        ``(y, x)`` centres of flat ROIs (e.g. from
+        :func:`ctdenoiser.detectability.sample_flat_locations`). Each ROI is
+        detrended (mean removed) before the FFT so only the *noise* texture,
+        not the slowly varying anatomy, contributes.
+    roi_size : int
+        Side length of each square ROI.
+
+    Returns
+    -------
+    dict
+        ``{"radial_nps", "peak_freq", "mean_freq", "total_power"}``.
+        ``radial_nps`` is the azimuthally-averaged power vs. frequency-bin index;
+        ``peak_freq`` is the (normalised, 0..1) frequency at which the NPS peaks;
+        ``mean_freq`` is the power-weighted spectral centroid — a robust summary
+        of where the noise energy sits, so that a denoiser pushing power to low
+        frequency (blotchy / "waxy" texture) shows up as a *drop* in ``mean_freq``
+        even when the spectrum has no sharp peak; ``total_power`` is the mean
+        noise variance over the ROIs.
+    """
+    img = image.reshape(image.shape[-2:])
+    h, w = img.shape
+    half = roi_size // 2
+    spectra = []
+    total_power = 0.0
+    n = 0
+    for cy, cx in rois:
+        y0, x0 = cy - half, cx - half
+        if y0 < 0 or x0 < 0 or y0 + roi_size > h or x0 + roi_size > w:
+            continue
+        roi = img[y0 : y0 + roi_size, x0 : x0 + roi_size]
+        roi = roi - roi.mean()  # detrend so anatomy gradient does not leak in
+        spec = torch.fft.fftshift(torch.fft.fft2(roi)).abs() ** 2 / (roi_size ** 2)
+        spectra.append(spec)
+        total_power += float((roi ** 2).mean().item())
+        n += 1
+    if n == 0:
+        raise ValueError("no in-bounds ROIs for uniform_nps")
+    mean_spec = torch.stack(spectra, 0).mean(0)
+    radial = _radial_profile(mean_spec)
+    nyquist = len(radial) - 1
+    # Drop the DC bin (index 0) for both summaries; it carries no texture info.
+    ac = radial[1:]
+    freqs = torch.arange(1, len(radial), device=radial.device, dtype=radial.dtype)
+    peak_freq = (int(torch.argmax(ac).item()) + 1) / nyquist
+    mean_freq = float((freqs * ac).sum() / (ac.sum().clamp_min(1e-12))) / nyquist
+    return {
+        "radial_nps": radial,
+        "peak_freq": peak_freq,
+        "mean_freq": mean_freq,
+        "total_power": total_power / n,
+    }

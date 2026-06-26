@@ -124,13 +124,20 @@ analytic, as a unit test — otherwise reviewers won't trust it.
 
 ## Sequencing
 
-- [ ] **PR 1 (foundation, low-risk):** `insert_signal` + `uniform_nps` +
-      `tests/test_detectability.py` (analytic-Gaussian CHO sanity + verify the
-      `low_present = low + s` identity on real data). ~2–3 days.
-- [ ] **PR 2:** `cho_detectability` (LG channels, template, d'/AUC), validated
-      against the Gaussian unit test. ~2–3 days.
-- [ ] **PR 3:** `scripts/evaluate_detectability.py` + W&B/CSV logging +
-      `figures.py` detectability panel. ~1–2 days.
+- [x] **PR 1 (foundation, low-risk):** `insert_signal` + `uniform_nps` +
+      `tests/test_detectability.py` (analytic-Gaussian CHO sanity + the
+      `low_present = low + s` insertion identity). *Done:*
+      `ctdenoiser/detectability.py` (`insert_signal`/`signal_template`,
+      `sample_flat_locations`, `extract_rois`); `uniform_nps` added to
+      `ctdenoiser/metrics.py`; `nps_ratio` renamed to `residual_spectrum`
+      (alias kept).
+- [x] **PR 2:** `cho_detectability` (LG channels, template, d'/AUC), validated
+      against the analytic-Gaussian unit test
+      (`tests/test_detectability.py::test_cho_matches_analytic_dprime_in_white_noise`).
+- [x] **PR 3:** `scripts/evaluate_detectability.py` — offline CHO/NPS eval over a
+      checkpoint or the identity baseline, CSV logging (input/denoised/clean d',
+      detectability-preserved ratio, NPS centroid). *Still to do:* a
+      `figures.py` detectability panel (needs real-run CSVs).
 - [ ] **PR 4:** run across all benchmark methods + SSFlow; write the
       corrected-NPS + detectability results into `paper/main.tex`.
 
