@@ -17,6 +17,7 @@ from ctdenoiser.detectability import (
     extract_rois,
     insert_signal,
     laguerre_gauss_channels,
+    run_detectability_eval,
     sample_flat_locations,
     signal_template,
 )
@@ -132,6 +133,30 @@ def test_cho_detects_stronger_signal_better():
 def test_residual_spectrum_alias_matches_legacy_name():
     a, b = torch.rand(1, 1, 32, 32), torch.rand(1, 1, 32, 32)
     assert residual_spectrum(a, b) == nps_ratio(a, b)
+
+
+def test_run_detectability_eval_identity_preserves_and_keys():
+    """The end-to-end eval: identity denoiser must preserve detectability exactly,
+    and the clean reference must beat the noisy input."""
+    torch.manual_seed(0)
+    # Flat-background slices so sample_flat_locations finds lesion sites.
+    loader = []
+    for _ in range(4):
+        full = 0.5 * torch.ones(1, 1, 96, 96)
+        low = (full + 0.04 * torch.randn(1, 1, 96, 96)).clamp(0, 1)
+        loader.append((low, full))
+
+    res = run_detectability_eval(
+        lambda x: x, loader, torch.device("cpu"), hu_scale=400.0,
+        contrast_hu=40.0, roi_size=24, sites_per_slice=4,
+    )
+    # Identity: the "denoised" stage is byte-identical to the input stage.
+    assert res["detectability_preserved"] == pytest.approx(1.0, abs=1e-6)
+    # Clean reference (no noise) is the detectability ceiling.
+    assert res["d_prime_clean"] >= res["d_prime_input"]
+    for key in ("d_prime_input", "d_prime_denoised", "auc_denoised",
+                "nps_mean_freq_denoised", "noise_power_input", "n_slices"):
+        assert key in res
 
 
 def test_uniform_nps_peak_shifts_low_for_blotchy_noise():

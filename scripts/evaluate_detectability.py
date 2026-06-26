@@ -39,15 +39,8 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ctdenoiser.detectability import (  # noqa: E402
-    cho_detectability,
-    extract_rois,
-    insert_signal,
-    sample_flat_locations,
-    signal_template,
-)
+from ctdenoiser.detectability import run_detectability_eval  # noqa: E402
 from ctdenoiser.inference import overlapped_inference  # noqa: E402
-from ctdenoiser.metrics import uniform_nps  # noqa: E402
 from ctdenoiser.train import MODELS, build_loaders  # noqa: E402
 
 
@@ -76,101 +69,6 @@ def _denoiser(args, device):
         ).clamp(0.0, 1.0)
 
     return run
-
-
-def evaluate_detectability(denoise, loader, device, args):
-    """Accumulate present/absent ROI ensembles over a loader and score the CHO.
-
-    For each slice we sample flat lesion sites on the clean reference, insert the
-    same known lesion at every site (sites are kept >= ``roi_size`` apart so the
-    nonlinear denoiser barely couples them), and build:
-
-        low_present = low + s,  low_absent = low                 (input stage)
-        denoised(low_present), denoised(low_absent)              (denoised stage)
-        clean + s,   clean                                       (clean ceiling)
-
-    ROIs are extracted at the known sites and pooled across all slices, then a
-    single CHO ``d'`` is computed per stage. ``d'_denoised / d'_input`` answers
-    "is detectability preserved"; the clean ceiling bounds what is achievable.
-    """
-    roi = args.roi_size
-    # The SKE template: the lesion as it sits at the centre of an ROI.
-    template = signal_template(
-        (roi, roi), (roi // 2, roi // 2), args.radius_px,
-        args.contrast_hu, args.hu_scale, profile=args.profile,
-        device=device, dtype=torch.float32,
-    )
-
-    stages = ("input", "denoised", "clean")
-    present = {s: [] for s in stages}
-    absent = {s: [] for s in stages}
-    nps_in, nps_out = [], []
-
-    n_slices = 0
-    for low, full in loader:
-        low, full = low.to(device), full.to(device)
-        clean = full[0, 0]
-        sites = sample_flat_locations(
-            clean, args.sites_per_slice, roi, var_quantile=args.var_quantile,
-            seed=args.seed + n_slices,
-        )
-        if not sites:
-            continue
-
-        # One signal map with a lesion at every (well-separated) site.
-        s_map = torch.zeros_like(clean)
-        for cy, cx in sites:
-            s_map = s_map + signal_template(
-                clean.shape, (cy, cx), args.radius_px, args.contrast_hu,
-                args.hu_scale, profile=args.profile,
-                device=device, dtype=clean.dtype,
-            )
-        s_map = s_map[None, None]
-
-        low_present, low_absent = low + s_map, low
-        clean_present, clean_absent = full + s_map, full
-        den_present = denoise(low_present)
-        den_absent = denoise(low_absent)
-
-        imgs = {
-            "input": (low_present, low_absent),
-            "denoised": (den_present, den_absent),
-            "clean": (clean_present, clean_absent),
-        }
-        for st, (pi, ai) in imgs.items():
-            present[st].append(extract_rois(pi[0, 0], sites, roi))
-            absent[st].append(extract_rois(ai[0, 0], sites, roi))
-
-        # Reference-free NPS: input noise vs denoised-output noise on flat ROIs.
-        nps_in.append(uniform_nps(low_absent[0, 0], sites, roi_size=roi))
-        nps_out.append(uniform_nps(den_absent[0, 0], sites, roi_size=roi))
-
-        n_slices += 1
-        if args.max_slices and n_slices >= args.max_slices:
-            break
-
-    if n_slices == 0:
-        raise RuntimeError("no slices yielded usable flat ROIs")
-
-    results = {"n_slices": n_slices}
-    for st in stages:
-        p = torch.cat(present[st], 0)
-        a = torch.cat(absent[st], 0)
-        cho = cho_detectability(p, a, signal=template, n_channels=args.n_channels)
-        results[f"d_prime_{st}"] = cho["d_prime"]
-        results[f"auc_{st}"] = cho["auc"]
-        results[f"n_rois_{st}"] = cho["n_present"]
-
-    d_in = results["d_prime_input"]
-    results["detectability_preserved"] = (
-        results["d_prime_denoised"] / d_in if d_in > 0 else float("nan")
-    )
-    # Mean noise spectral centroid: a drop after denoising = blotchier texture.
-    results["nps_mean_freq_input"] = sum(x["mean_freq"] for x in nps_in) / n_slices
-    results["nps_mean_freq_denoised"] = sum(x["mean_freq"] for x in nps_out) / n_slices
-    results["noise_power_input"] = sum(x["total_power"] for x in nps_in) / n_slices
-    results["noise_power_denoised"] = sum(x["total_power"] for x in nps_out) / n_slices
-    return results
 
 
 def main(argv=None):
@@ -229,7 +127,13 @@ def main(argv=None):
     method = "identity" if args.identity else args.model
     print(f"device={device}  method={method}  contrast={args.contrast_hu} HU")
 
-    res = evaluate_detectability(denoise, val_loader, device, args)
+    res = run_detectability_eval(
+        denoise, val_loader, device, hu_scale=args.hu_scale,
+        contrast_hu=args.contrast_hu, radius_px=args.radius_px, profile=args.profile,
+        roi_size=args.roi_size, sites_per_slice=args.sites_per_slice,
+        var_quantile=args.var_quantile, n_channels=args.n_channels,
+        max_slices=args.max_slices, seed=args.seed,
+    )
     res = {"method": method, **res}
 
     print(
