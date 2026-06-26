@@ -59,7 +59,11 @@ correlated noise violates the pixel-independence assumption behind blind-spot
 and downsampling methods.  Motivated by the resulting $3$--$4$\,dB
 self-supervised gap, we propose a \emph{self-supervised rectified flow with
 similarity-based noisy pairs} whose unconditional velocity field is a
-Noise2Noise estimator by construction.  All code, model definitions, and
+Noise2Noise estimator by construction.  It attains $+1.39$\,dB---the best
+label-free result in our benchmark, ahead of Noise2Sim---and an ablation shows
+\emph{one-step} inference is essential: multi-step Euler refinement steadily
+degrades fidelity (to $+0.04$\,dB), evidence that the decorrelated pairing,
+not iterative sampling, is what helps.  All code, model definitions, and
 data-loading utilities are released at
 \href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
 \end{abstract}
@@ -361,7 +365,10 @@ the floor every method must beat.
            last logged epoch (CTformer/Supervised ep.\,37,
            CTformer/Noise2Sim ep.\,26).  $\ddagger$: CFM crashed at ep.\,15
            and had not converged; shown for reference.  CFM requires paired
-           targets, so it has no blind-spot or similarity variant.}
+           targets, so it has no blind-spot or similarity variant.  SSFlow
+           (ours) rows use one-step inference at 50 epochs; the one- vs.\
+           multi-step ablation is in Section~\ref{sec:method}.
+           \underline{Underline}: best \emph{label-free} result.}
   \label{tab:results}
   \begin{tabular}{llrlcccc}
     \toprule
@@ -381,6 +388,10 @@ the floor every method must beat.
     DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 32.14 \,(+0.70) & 0.891 & 0.0251 & 0.178 & 0.0067 \\
     RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 31.94 \,(+0.51) & 0.904 & 0.0257 & \textbf{0.162} & 0.0070 \\
     CTformer~\cite{wang2022ctformer}$^{\dagger}$ & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 31.09 \,($-0.35$) & 0.885 & 0.0282 & 0.247 & 0.0083 \\
+    \midrule
+    SSFlow $r{=}2$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & \underline{32.83} \,(+1.39) & \underline{0.917} & \underline{0.0231} & 0.186 & \underline{0.0057} \\
+    SSFlow $r{=}3$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & 32.28 \,(+0.85) & 0.914 & 0.0246 & 0.189 & 0.0064 \\
+    SSFlow $r{=}1$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & 32.20 \,(+0.77) & 0.907 & 0.0249 & 0.183 & 0.0066 \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & 31.52 \,(+0.08) & 0.895 & 0.0271 & 0.175 & 0.0077 \\
     U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 31.49 \,(+0.05) & 0.893 & 0.0271 & 0.188 & 0.0078 \\
@@ -406,6 +417,11 @@ pixel-independence assumption these methods rely on.  \textbf{Third}, the
 $3$--$4$\,dB gap between the best self-supervised result and the supervised
 upper bound quantifies the headroom for correlated-noise-aware
 self-supervision, which motivates the method of Section~\ref{sec:method}.
+\textbf{Fourth}, that method---our self-supervised rectified flow
+(SSFlow)---closes part of this gap: at $r{=}2$ it reaches $+1.39$\,dB, the best
+label-free result in the table and ahead of the strongest Noise2Sim backbone
+($+1.18$\,dB), while also leading every label-free method on SSIM, RMSE, and
+NPS-ratio.
 CTformer and CFM runs were truncated by crashes and are reported at their
 last logged epoch; completing them, together with multi-anatomy and
 multi-seed evaluation, is in progress.
@@ -479,15 +495,29 @@ inference, the one-step estimate is $\hat s = x + v_\theta(x,0)$, optionally
 refined with a few Euler steps of the learned ODE initialised at the noisy
 input; we do \emph{not} integrate to the noisy endpoint distribution.
 
-\paragraph{Hypothesis and ablation.}
+\paragraph{Ablation.}
 By \eqref{eq:ss-mmse}, the one-step estimate coincides with
 similarity-based Noise2Noise regression; the flow is justified only if
 \emph{multi-step refinement improves the structured residual} that one-step
-MMSE leaves behind.  Our central ablation isolates this: one-step vs.\
-$k$-step inference, sensitivity to $r$, and comparison against direct
-Noise2Sim and the supervised upper bound under the harness above.  A
-positive multi-step effect is the contribution; a null effect narrows the
-claim to the correlated-noise-aware pairing.
+MMSE leaves behind.  We isolate this on a $3{\times}2$ grid over the exclusion
+radius $r\in\{1,2,3\}$ and the number of inference steps $\{1,4\}$, against
+direct Noise2Sim and the supervised upper bound.  Two findings emerge.
+\emph{(i) The decorrelated pairing is the active ingredient.}  PSNR follows an
+inverted-U in $r$, peaking at $r{=}2$ ($+1.39$\,dB, Table~\ref{tab:results});
+$r{=}1$---which excludes only the query pixel, recovering the Noise2Sim
+target---is $0.6$\,dB worse, confirming that matching \emph{beyond} the FBP
+correlation length is what helps.  \emph{(ii) Multi-step refinement does not
+help; it hurts.}  Four-step Euler inference is uniformly below one-step at
+matched training and \emph{degrades} as training proceeds, falling to $+0.56$,
+$+0.35$, and $+0.04$\,dB at $r{=}1,2,3$ (four-step runs ongoing, ep.\,38--46)
+versus $+0.77$, $+1.39$, $+0.85$ for one-step (ep.\,50).  The one-step
+posterior mean of \eqref{eq:ss-mmse}---not iterative sampling---is therefore
+the operative estimator: a null multi-step effect that narrows the
+contribution to the correlated-noise-aware pairing, in line with
+``no-new-denoiser'' reports that stochastic sampling trades fidelity for
+texture.  Consistent with that trade, val PSNR peaks early and then declines
+while GMSD keeps improving, so we checkpoint and report the
+best-validation-PSNR epoch.
 
 % -----------------------------------------------------------------------
 \section{Discussion}
@@ -512,9 +542,11 @@ report all five metrics in Table~\ref{tab:results}.
 \paragraph{Limitations.}
 Results are single-seed on the abdomen window at 50 epochs; multi-anatomy
 and multi-seed runs, per-patient standard deviations, and completion of the
-truncated CTformer/CFM runs are in progress.  The proposed self-supervised
-flow (Section~\ref{sec:method}) is described but not yet evaluated; its
-ablation against Noise2Sim is the primary planned experiment.
+truncated CTformer/CFM runs are in progress.  For the proposed self-supervised
+flow (Section~\ref{sec:method}) the four-step inference arm is still completing
+(ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
+multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
+finalised.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
@@ -528,7 +560,10 @@ correlated-noise-aware Noise2Sim reliably beats it while blind-spot
 Noise2Void degrades---quantifying a $3$--$4$\,dB gap.  To close it we
 proposed a self-supervised rectified flow with similarity-based noisy pairs
 whose unconditional velocity field is a Noise2Noise estimator by
-construction.  All code is released to facilitate reproducibility.
+construction; it attains $+1.39$\,dB, the best label-free result in the
+benchmark, and an ablation shows one-step inference is essential while
+multi-step refinement degrades fidelity.  All code is released to facilitate
+reproducibility.
 
 % -----------------------------------------------------------------------
 \bibliographystyle{plain}

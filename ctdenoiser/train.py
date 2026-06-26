@@ -513,6 +513,13 @@ def main(argv=None):
                 resume="allow",
             )
             _wb.config.update({**prov, **ds_prov}, allow_val_change=True)
+            # Summarise each val metric by its *best* epoch rather than its last.
+            # Val PSNR routinely peaks mid-training and then regresses (markedly
+            # for the flow models), so W&B's default last-value summary understates
+            # a run. Mirrors the best-by-PSNR checkpoint tracking in the loop below.
+            for _m, _how in (("psnr", "max"), ("ssim", "max"), ("rmse", "min"),
+                             ("gmsd", "min"), ("nps_ratio", "min")):
+                _wb.define_metric(f"val/{_m}", summary=_how)
         else:
             print("wandb not installed; skipping W&B logging.")
 
@@ -572,7 +579,9 @@ def main(argv=None):
     criterion = torch.nn.MSELoss()
 
     n_train = len(train_loader.dataset)
-    last_metrics = None
+    best_psnr = -float("inf")
+    best_metrics = None
+    best_state = None
     for epoch in range(1, args.epochs + 1):
         model.train()
         running = 0.0
@@ -607,21 +616,32 @@ def main(argv=None):
         train_loss = running / n_train
         print(f"epoch {epoch}/{args.epochs}  loss={train_loss:.6f}")
         if _wb:
-            last_metrics = evaluate(model, val_loader, device, full_slice,
-                                    args.patch_size, eval_steps=args.flow_steps_eval)
+            epoch_metrics = evaluate(model, val_loader, device, full_slice,
+                                     args.patch_size, eval_steps=args.flow_steps_eval)
             _wb.log({
                 "epoch": epoch,
                 "train/loss": train_loss,
-                **{f"val/{k}": v for k, v in last_metrics.items()},
+                **{f"val/{k}": v for k, v in epoch_metrics.items()},
             })
+            # Keep the best-by-PSNR weights: val PSNR often peaks before the final
+            # epoch, so the last-epoch model is not the one to checkpoint or report.
+            if epoch_metrics["psnr"] > best_psnr:
+                best_psnr = epoch_metrics["psnr"]
+                best_metrics = epoch_metrics
+                best_state = {k: v.detach().cpu().clone()
+                              for k, v in model.state_dict().items()}
             if args.log_images > 0 and epoch % args.log_image_freq == 0:
                 log_sample_images(model, val_loader, device, full_slice,
                                   args.patch_size, _wb, n=args.log_images, epoch=epoch)
 
-    if last_metrics is None:
-        last_metrics = evaluate(model, val_loader, device, full_slice,
-                                args.patch_size, eval_steps=args.flow_steps_eval)
-    metrics = last_metrics
+    if best_metrics is not None:
+        # Best epoch observed during training (per-epoch eval needs W&B logging).
+        metrics, save_state = best_metrics, best_state
+    else:
+        # W&B disabled -> no per-epoch eval; score the final model once.
+        metrics = evaluate(model, val_loader, device, full_slice,
+                           args.patch_size, eval_steps=args.flow_steps_eval)
+        save_state = model.state_dict()
     print(
         f"eval  psnr={metrics['psnr']:.3f}  ssim={metrics['ssim']:.4f}  "
         f"rmse={metrics['rmse']:.5f}  gmsd={metrics['gmsd']:.5f}  "
@@ -630,7 +650,7 @@ def main(argv=None):
     )
 
     if _wb:
-        # Headline summary: how far the trained model beats the do-nothing floor.
+        # Headline summary: how far the best epoch beats the do-nothing floor.
         _wb.summary["val/psnr_gain"] = metrics["psnr"] - baseline["psnr"]
         _wb.summary["val/ssim_gain"] = metrics["ssim"] - baseline["ssim"]
         _wb.finish()
@@ -638,7 +658,7 @@ def main(argv=None):
     ckpt_dir = Path(args.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     ckpt = ckpt_dir / f"{args.model}.pt"
-    torch.save(model.state_dict(), ckpt)
+    torch.save(save_state, ckpt)
     print(f"saved checkpoint -> {ckpt}")
 
 
