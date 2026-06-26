@@ -39,6 +39,7 @@ from .data.dataset import (
     SyntheticCTDataset,
     window_for_anatomy,
 )
+from .detectability import run_detectability_eval
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, SelfSupervisedFlow, UNet
@@ -325,6 +326,32 @@ def run_f2n_eval(loader, device, args):
 
 
 @torch.no_grad()
+def detectability_eval(model, loader, device, full_slice, args):
+    """One-shot task-based CHO/NPS detectability eval on the (best) model.
+
+    Run once after training, not in the per-epoch loop: the CHO needs many
+    realizations x ROIs and is far too expensive to evaluate every epoch (see
+    docs/plan.md). The denoiser is wrapped to match the normal eval path
+    (overlapped full-slice inference, or a direct forward for patch data).
+    """
+    def denoise(low):
+        if full_slice:
+            return overlapped_inference(
+                model, low, patch_size=args.patch_size, margin=args.patch_size // 4
+            ).clamp(0.0, 1.0)
+        return model(low).clamp(0.0, 1.0)
+
+    return run_detectability_eval(
+        denoise, loader, device, hu_scale=args.hu_scale,
+        contrast_hu=args.detectability_contrast_hu,
+        roi_size=args.detectability_roi_size,
+        sites_per_slice=args.detectability_sites,
+        max_slices=args.detectability_max_slices,
+        seed=args.seed,
+    )
+
+
+@torch.no_grad()
 def log_sample_images(model, loader, device, full_slice, patch_size, wb, n=4, epoch=None):
     """Log a [low-dose | predicted | full-dose | |diff|] panel grid to W&B."""
     if not _MPL_AVAILABLE:
@@ -462,6 +489,20 @@ def main(argv=None):
                         help="number of val samples to log as images each epoch (0=off)")
     parser.add_argument("--log-image-freq", type=int, default=1, metavar="FREQ",
                         help="log images every FREQ epochs (default: every epoch)")
+    parser.add_argument("--eval-detectability", action="store_true",
+                        help="after training, run the task-based CHO/NPS "
+                             "detectability eval once on the best model and log "
+                             "det/* metrics (see ctdenoiser.detectability). "
+                             "Skipped for per-image modes (zsn2n/f2n).")
+    parser.add_argument("--detectability-contrast-hu", type=float, default=12.0,
+                        help="inserted lesion contrast in HU (keep low so noise "
+                             "dominates; eval-detectability only)")
+    parser.add_argument("--detectability-roi-size", type=int, default=32,
+                        help="ROI side length for the CHO/NPS eval")
+    parser.add_argument("--detectability-sites", type=int, default=6,
+                        help="lesion sites sampled per slice for the CHO eval")
+    parser.add_argument("--detectability-max-slices", type=int, default=0,
+                        help="cap slices used by the detectability eval (0=all val)")
     args = parser.parse_args(argv)
 
     if args.training_mode in ("n2v", "n2sim") and args.model == "flowmatching":
@@ -539,6 +580,12 @@ def main(argv=None):
     # eval time; they have no shared model, training loop, or checkpoint, so they
     # short-circuit here.
     if args.training_mode in ("zsn2n", "f2n"):
+        if args.eval_detectability:
+            # CHO needs present+absent denoises per ROI ensemble; for per-image
+            # methods each denoise is a full from-scratch optimisation, so a
+            # detectability eval would retrain the net thousands of times. Skip.
+            print(f"detectability eval not supported for per-image mode "
+                  f"{args.training_mode}; skipping.")
         if args.training_mode == "zsn2n":
             metrics = run_zsn2n_eval(val_loader, device, args)
         else:
@@ -649,10 +696,27 @@ def main(argv=None):
         f"params={stats['param_count']:,}  latency={metrics['latency_ms']:.1f} ms"
     )
 
+    # One-shot task-based detectability eval on the best weights. Checkpoints are
+    # not persisted by the sweep, so this runs in-process right after training.
+    det = None
+    if args.eval_detectability:
+        model.load_state_dict(save_state)
+        det = detectability_eval(model, val_loader, device, full_slice, args)
+        print(
+            f"detectability  d'(input)={det['d_prime_input']:.3f} -> "
+            f"d'(denoised)={det['d_prime_denoised']:.3f} "
+            f"(clean ceiling {det['d_prime_clean']:.3f})  "
+            f"preserved={det['detectability_preserved']:.3f}  "
+            f"nps_freq {det['nps_mean_freq_input']:.3f}->"
+            f"{det['nps_mean_freq_denoised']:.3f}"
+        )
+
     if _wb:
         # Headline summary: how far the best epoch beats the do-nothing floor.
         _wb.summary["val/psnr_gain"] = metrics["psnr"] - baseline["psnr"]
         _wb.summary["val/ssim_gain"] = metrics["ssim"] - baseline["ssim"]
+        if det is not None:
+            _wb.log({f"det/{k}": v for k, v in det.items()})
         _wb.finish()
 
     ckpt_dir = Path(args.checkpoint_dir)

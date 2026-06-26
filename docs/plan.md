@@ -136,10 +136,15 @@ analytic, as a unit test — otherwise reviewers won't trust it.
       (`tests/test_detectability.py::test_cho_matches_analytic_dprime_in_white_noise`).
 - [x] **PR 3:** `scripts/evaluate_detectability.py` — offline CHO/NPS eval over a
       checkpoint or the identity baseline, CSV logging (input/denoised/clean d',
-      detectability-preserved ratio, NPS centroid). *Still to do:* a
-      `figures.py` detectability panel (needs real-run CSVs).
-- [ ] **PR 4:** run across all benchmark methods + SSFlow; write the
-      corrected-NPS + detectability results into `paper/main.tex`.
+      detectability-preserved ratio, NPS centroid). Shared core
+      (`run_detectability_eval`) also runs *in-process* at the end of each
+      training run via `train.py --eval-detectability`, logged as `det/*` — the
+      sweep checkpoints are not persisted, so the eval runs while the model is
+      still in memory rather than over saved checkpoints. Wired into `sweep.yml`.
+      *Still to do:* a `figures.py` detectability panel (needs real-run W&B data).
+- [ ] **PR 4:** launch the fresh benchmark sweep (now emits `det/*`), then write
+      the corrected-NPS + detectability results into `paper/main.tex`. Multi-seed
+      still needed for significance (see rigor work below).
 
 **≈1.5–2.5 weeks** of focused work to a validated, paper-grade implementation;
 the CHO validation is the main risk, the rest is mechanical.
