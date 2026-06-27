@@ -159,6 +159,28 @@ def test_run_detectability_eval_identity_preserves_and_keys():
         assert key in res
 
 
+def test_run_detectability_eval_contrast_detail_curve():
+    """A list of contrasts sweeps a CD curve: per-contrast keys + monotone d',
+    with the highest contrast surfaced as the un-prefixed headline."""
+    torch.manual_seed(0)
+    loader = []
+    for _ in range(4):
+        full = 0.5 * torch.ones(1, 1, 96, 96)
+        low = (full + 0.04 * torch.randn(1, 1, 96, 96)).clamp(0, 1)
+        loader.append((low, full))
+
+    res = run_detectability_eval(
+        lambda x: x, loader, torch.device("cpu"), hu_scale=400.0,
+        contrast_hu=[40.0, 160.0], roi_size=24, sites_per_slice=4,
+    )
+    # Per-contrast keys exist for both operating points.
+    assert "c40/d_prime_clean" in res and "c160/d_prime_clean" in res
+    # Higher contrast is more detectable.
+    assert res["c160/d_prime_clean"] > res["c40/d_prime_clean"]
+    # The headline (un-prefixed) keys mirror the highest contrast.
+    assert res["d_prime_clean"] == pytest.approx(res["c160/d_prime_clean"])
+
+
 def test_uniform_nps_peak_shifts_low_for_blotchy_noise():
     """Low-pass (blotchy) noise must shift the NPS peak to lower frequency."""
     import torch.nn.functional as F

@@ -30,6 +30,14 @@ parameters:
   epochs:
     value: 50
 
+  # Multiple seeds for significance (the +0.2 dB SSFlow-vs-Noise2Sim lead needs
+  # >=3 seeds to survive review). Multiplies the 3x2 ablation grid by 3.
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
   # Noisy-pair construction: non-local self-similar patches (correlated-noise-aware).
   ssflow-pairing:
     value: similarity
@@ -64,3 +72,8 @@ command:
   - ${args}
   - --h5-path=/workspace/data.h5
   - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability for SSFlow too (CHO d' + corrected NPS + contrast-
+  # detail curve), so the flow model gets a det/* row in the same table as the
+  # benchmark. store_true flag -> appended here, not in `parameters`.
+  - --eval-detectability
+  - --detectability-max-slices=200
