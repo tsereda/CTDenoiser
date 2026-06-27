@@ -35,6 +35,16 @@ parameters:
   epochs:
     value: 50
 
+  # Multiple seeds for significance: single-seed tables are an automatic reject,
+  # and the self-supervised leads (e.g. Noise2Sim vs N2V) need >=3 seeds + a
+  # per-patient std to survive review. Triples the grid; cut to [0, 1] if GPU is
+  # tight. Each (model, mode, seed) is an independent run.
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
   # --- method-specific hyperparameters (used only by the matching mode) ---
   # Noise2Void blind-spot self-supervision
   n2v-mask-fraction:
@@ -85,8 +95,13 @@ command:
   - --h5-path=/workspace/data.h5
   - --wandb-project=ctdenoiser-sweep
   # Task-based detectability (CHO d' + corrected NPS) run once on the best model
-  # at the end of each run -> logged as det/* alongside PSNR/SSIM. Appended in
-  # `command` (not `parameters`) because it is a store_true flag and W&B's
-  # ${args} macro would emit `--eval-detectability=True`, which argparse rejects.
-  # No-op for the per-image zsn2n/f2n runs (they print a skip and continue).
+  # at the end of each run -> logged as det/* (+ det/c{hu}/* contrast-detail
+  # curve) alongside PSNR/SSIM. Appended in `command` (not `parameters`) because
+  # it is a store_true flag and W&B's ${args} macro would emit
+  # `--eval-detectability=True`, which argparse rejects. No-op for the per-image
+  # zsn2n/f2n runs (they print a skip and continue).
   - --eval-detectability
+  # The CHO re-denoises present/absent ROIs per contrast, so cap the slice count
+  # to keep the end-of-run eval bounded (200 slices x 6 sites is ample for a
+  # stable d'); drop the flag to use the full val set.
+  - --detectability-max-slices=200

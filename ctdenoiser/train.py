@@ -343,7 +343,7 @@ def detectability_eval(model, loader, device, full_slice, args):
 
     return run_detectability_eval(
         denoise, loader, device, hu_scale=args.hu_scale,
-        contrast_hu=args.detectability_contrast_hu,
+        contrast_hu=args.detectability_contrasts_hu,
         roi_size=args.detectability_roi_size,
         sites_per_slice=args.detectability_sites,
         max_slices=args.detectability_max_slices,
@@ -494,9 +494,12 @@ def main(argv=None):
                              "detectability eval once on the best model and log "
                              "det/* metrics (see ctdenoiser.detectability). "
                              "Skipped for per-image modes (zsn2n/f2n).")
-    parser.add_argument("--detectability-contrast-hu", type=float, default=12.0,
-                        help="inserted lesion contrast in HU (keep low so noise "
-                             "dominates; eval-detectability only)")
+    parser.add_argument("--detectability-contrasts-hu", type=float, nargs="+",
+                        default=[40.0, 80.0, 160.0], metavar="HU",
+                        help="inserted lesion contrast(s) in HU; multiple values "
+                             "sweep a contrast-detail curve (logged det/c{hu}/*), "
+                             "with the highest as the headline det/* "
+                             "(eval-detectability only)")
     parser.add_argument("--detectability-roi-size", type=int, default=32,
                         help="ROI side length for the CHO/NPS eval")
     parser.add_argument("--detectability-sites", type=int, default=6,
@@ -703,7 +706,8 @@ def main(argv=None):
         model.load_state_dict(save_state)
         det = detectability_eval(model, val_loader, device, full_slice, args)
         print(
-            f"detectability  d'(input)={det['d_prime_input']:.3f} -> "
+            f"detectability @{max(args.detectability_contrasts_hu):g}HU  "
+            f"d'(input)={det['d_prime_input']:.3f} -> "
             f"d'(denoised)={det['d_prime_denoised']:.3f} "
             f"(clean ceiling {det['d_prime_clean']:.3f})  "
             f"preserved={det['detectability_preserved']:.3f}  "

@@ -94,8 +94,10 @@ def main(argv=None):
     p.add_argument("--batch-size", type=int, default=1)
     p.add_argument("--flow-steps", type=int, default=20)
     # Signal / ROI / observer knobs.
-    p.add_argument("--contrast-hu", type=float, default=12.0,
-                   help="lesion contrast in HU (keep low so noise dominates)")
+    p.add_argument("--contrast-hu", type=float, nargs="+", default=[40.0, 80.0, 160.0],
+                   metavar="HU",
+                   help="lesion contrast(s) in HU; multiple values sweep a "
+                        "contrast-detail curve (det/c{hu}/*), highest = headline")
     p.add_argument("--radius-px", type=float, default=4.0)
     p.add_argument("--profile", choices=["disk", "gaussian"], default="gaussian")
     p.add_argument("--roi-size", type=int, default=32)
@@ -125,7 +127,7 @@ def main(argv=None):
 
     denoise = _denoiser(args, device)
     method = "identity" if args.identity else args.model
-    print(f"device={device}  method={method}  contrast={args.contrast_hu} HU")
+    print(f"device={device}  method={method}  contrasts={args.contrast_hu} HU")
 
     res = run_detectability_eval(
         denoise, val_loader, device, hu_scale=args.hu_scale,
