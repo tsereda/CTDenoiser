@@ -60,6 +60,16 @@ METRICS = [
     ("val/nps_ratio", "NPS ratio",  False),
 ]
 
+# W&B may leave the bare summary column empty and only populate the best-epoch
+# aggregation (``.max`` for higher-is-better metrics, ``.min`` otherwise).
+METRIC_AGG = {
+    "val/psnr":      "val/psnr.max",
+    "val/ssim":      "val/ssim.max",
+    "val/rmse":      "val/rmse.min",
+    "val/gmsd":      "val/gmsd.min",
+    "val/nps_ratio": "val/nps_ratio.min",
+}
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -68,7 +78,13 @@ def load(path: str) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
     df = df[df["State"] == "finished"].copy()
     for col, *_ in METRICS:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        s = pd.to_numeric(df.get(col), errors="coerce")
+        if not isinstance(s, pd.Series):  # column absent -> all-NaN
+            s = pd.Series(np.nan, index=df.index)
+        alt = METRIC_AGG.get(col)
+        if alt and alt in df.columns:
+            s = s.fillna(pd.to_numeric(df[alt], errors="coerce"))
+        df[col] = s
     df["model"] = df["model"].str.strip().str.lower()
     return df
 

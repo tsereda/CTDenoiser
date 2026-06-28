@@ -1,0 +1,20 @@
+Loaded 27 finished runs (2 models, modes: ['f2n', 'n2sim', 'n2v', 'supervised', 'zsn2n'])
+
+model         mode         runs   PSNR (dB)        SSIM        RMSE        GMSD   NPS ratio
+-------------------------------------------------------------------------------------------
+dncnn         supervised      3       34.29      0.9239      0.0199      0.1855      0.0044
+redcnn        supervised      3       34.43      0.9266      0.0195      0.1680      0.0042
+dncnn         n2sim           3       31.66      0.8953      0.0271      0.1804      0.0082
+redcnn        n2sim           3       31.99      0.8999      0.0261      0.1657      0.0077
+dncnn         n2v             3       30.23      0.8752      0.0320      0.2037      0.0114
+redcnn        n2v             3       30.57      0.8828      0.0306      0.1800      0.0105
+dncnn         f2n             1       31.58      0.8964      0.0269      0.1758      0.0076
+redcnn        f2n             3       30.51      0.8812      0.0309      0.1844      0.0105
+dncnn         zsn2n           2       30.28      0.8771      0.0316      0.1884      0.0111
+redcnn        zsn2n           3       30.16      0.8788      0.0319      0.1887      0.0112
+
+Identity baseline (do-nothing) PSNR: 30.30 dB
+  ⚠ zsn2n PSNR ≈ baseline → zsn2n is barely denoising (near no-op).
+Note: zsn2n ignores --model (it trains a tiny per-image net), so its score is not comparable to the trained models — read it against the identity baseline.
+
+saved → figures/psnr_ssim_by_mode.png
