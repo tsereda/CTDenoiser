@@ -1,0 +1,29 @@
+Loaded 27 finished runs from '/root/.claude/uploads/e2b4011d-7016-5e79-99bb-253f2a4bb810/5fd24d3b-wandb_export_20260627T19_52_01.81805_00.csv'
+Models present: ['dncnn', 'redcnn']
+
+Generating figures…
+  saved → figures/01_metrics_bar.png
+  saved → figures/02_radar.png
+  saved → figures/03_scatter_psnr_ssim.png
+  saved → figures/04_heatmap.png
+
+% ── LaTeX table ─────────────────────────────────────────
+\begin{table}[h]
+  \centering
+  \caption{CT denoising model comparison (1 epoch, preliminary).}
+  \label{tab:model_comparison}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Model & PSNR (dB) & SSIM & RMSE & GMSD & NPS ratio \\
+    \midrule
+    DnCNN & 35.23 & 0.9371 & 0.0176 & 0.1715 & 0.0032 \\
+    RED-CNN & \textbf{35.37} & \textbf{0.9387} & \textbf{0.0173} & \textbf{0.1629} & \textbf{0.0031} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+── Plain summary ──────────────────────────────────────────
+Model              PSNR (dB)        SSIM        RMSE        GMSD   NPS ratio
+----------------------------------------------------------------------------
+DnCNN                  35.23      0.9371      0.0176      0.1715      0.0032
+RED-CNN                35.37      0.9387      0.0173      0.1629      0.0031

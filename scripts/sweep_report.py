@@ -47,10 +47,26 @@ METRICS = {
     "val/gmsd": ("GMSD", False),
     "val/nps_ratio": ("NPS ratio", False),
 }
+# W&B exports the per-metric summary under either the bare name or its
+# best-epoch aggregation (``.max`` for higher-is-better, ``.min`` otherwise).
+# Some exports leave the bare column empty, so fall back to the aggregation.
+METRIC_AGG = {
+    "val/psnr": "val/psnr.max",
+    "val/ssim": "val/ssim.max",
+    "val/rmse": "val/rmse.min",
+    "val/gmsd": "val/gmsd.min",
+    "val/nps_ratio": "val/nps_ratio.min",
+}
 BASELINE_PSNR = "baseline/psnr"  # logged by ctdenoiser.train if present
 
-MODE_ORDER = ["supervised", "n2v", "zsn2n"]
-MODE_COLOR = {"supervised": "#4C72B0", "n2v": "#55A868", "zsn2n": "#C44E52"}
+MODE_ORDER = ["supervised", "n2sim", "n2v", "f2n", "zsn2n"]
+MODE_COLOR = {
+    "supervised": "#4C72B0",
+    "n2sim":      "#DD8452",
+    "n2v":        "#55A868",
+    "f2n":        "#8172B2",
+    "zsn2n":      "#C44E52",
+}
 
 
 def load(paths) -> pd.DataFrame:
@@ -71,8 +87,10 @@ def load(paths) -> pd.DataFrame:
 
     # Training mode lives under different headers across exports; coalesce them,
     # filling gaps from one column with the other. Handles pandas' <NA>.
+    # ``method`` is the canonical name; some exports leave it blank and only
+    # populate ``training-mode``/``training_mode``, so try all three.
     mode = None
-    for col in ("training_mode", "training-mode"):
+    for col in ("method", "training_mode", "training-mode"):
         if col in df.columns:
             s = df[col].astype("string").str.strip().replace("", pd.NA)
             mode = s if mode is None else mode.fillna(s)
@@ -84,7 +102,13 @@ def load(paths) -> pd.DataFrame:
     df["model"] = df["model"].astype("string").str.strip().str.lower().astype(str)
 
     for col in METRICS:
-        df[col] = pd.to_numeric(df.get(col), errors="coerce")
+        s = pd.to_numeric(df.get(col), errors="coerce")
+        if not isinstance(s, pd.Series):  # column absent -> all-NaN
+            s = pd.Series(np.nan, index=df.index)
+        alt = METRIC_AGG.get(col)
+        if alt and alt in df.columns:
+            s = s.fillna(pd.to_numeric(df[alt], errors="coerce"))
+        df[col] = s
     # Drop runs with no PSNR (crashed / never evaluated).
     df = df[df["val/psnr"].notna()].copy()
     return df
@@ -137,8 +161,9 @@ def print_table(summary: pd.DataFrame, baseline):
         print("Identity baseline not in this export (re-run training to log "
               "baseline/* and compare it against zsn2n).")
     if (summary["mode"] == "zsn2n").any():
-        print("Note: zsn2n ignores --model (per-image net); its ~41 dB is not "
-              "comparable to the trained models — read it against the baseline.")
+        print("Note: zsn2n ignores --model (it trains a tiny per-image net), so "
+              "its score is not comparable to the trained models — read it "
+              "against the identity baseline.")
 
 
 def plot(summary: pd.DataFrame, baseline, out: Path, fmt: str):

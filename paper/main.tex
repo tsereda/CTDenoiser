@@ -463,6 +463,57 @@ CTformer and CFM runs were truncated by crashes and are reported at their
 last logged epoch; completing them, together with multi-anatomy and
 multi-seed evaluation, is in progress.
 
+\paragraph{Cross-validation robustness.}
+To check that the single-split ordering above is not an artefact of one
+patient partition, we repeat the regime comparison under a three-fold,
+patient-level cross-validation at a reduced 15-epoch budget
+(Table~\ref{tab:cv}).  The folds differ in difficulty---their unprocessed
+LDCT-input PSNR is $31.44$, $30.04$, and $29.27$\,dB---so we report the gain
+over each fold's \emph{own} input floor, averaged across folds ($\pm$ s.d.).
+The DnCNN and RED-CNN backbones, which completed all three folds, preserve the
+regime ordering of Table~\ref{tab:results} with a tight per-fold spread:
+supervised training gains $+4.0$ to $+4.2$\,dB ($\pm0.22$); Noise2Sim is again
+the only label-free method to clear the floor by a decisive margin
+($+1.74\pm0.09$\,dB on RED-CNN); and Noise2Void, Filter2Noise, and ZS-N2N stay
+within noise of the input ($|\Delta\text{PSNR}|\le0.32$\,dB).  Absolute PSNR
+runs $\sim$1\,dB below Table~\ref{tab:results} because these models train for 15
+rather than 50 epochs, but the \emph{relative} ordering---the paper's central
+claim---is unchanged across every fold.
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{Three-fold patient-level cross-validation on TCIA LDCT (abdomen;
+           15 epochs).  $\Delta$PSNR and SSIM are the mean ($\pm$ s.d.) across
+           the three folds; the PSNR gain is measured against each fold's own
+           LDCT-input floor ($31.44/30.04/29.27$\,dB for folds $1/2/3$).  PSNR,
+           RMSE, and NPS-ratio are fold means.  Only DnCNN and RED-CNN completed
+           all three folds and are shown; U-Net had incomplete fold coverage at
+           export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
+           (single row each).  \textbf{Bold}: best per column.
+           \underline{Underline}: best \emph{label-free} PSNR gain.}
+  \label{tab:cv}
+  \begin{tabular}{llccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} &
+    $\Delta$PSNR\,$\uparrow$ (dB) & PSNR\,$\uparrow$ & SSIM\,$\uparrow$ &
+    RMSE\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Supervised & \textbf{+4.19 $\pm$ 0.22} & \textbf{34.43} & \textbf{0.927 $\pm$ 0.013} & \textbf{0.0195} & \textbf{0.0042} \\
+    DnCNN~\cite{zhang2017beyond}   & Supervised & +4.04 $\pm$ 0.22 & 34.29 & 0.924 $\pm$ 0.015 & 0.0199 & 0.0044 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & \underline{+1.74 $\pm$ 0.09} & 31.99 & 0.900 $\pm$ 0.015 & 0.0261 & 0.0077 \\
+    DnCNN~\cite{zhang2017beyond}   & Noise2Sim~\cite{niu2020noise2sim} & +1.42 $\pm$ 0.28 & 31.66 & 0.895 $\pm$ 0.015 & 0.0271 & 0.0082 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & +0.32 $\pm$ 0.10 & 30.57 & 0.883 $\pm$ 0.019 & 0.0306 & 0.0105 \\
+    DnCNN~\cite{zhang2017beyond}   & Noise2Void~\cite{krull2019noise2void} & $-0.02$ $\pm$ 0.06 & 30.23 & 0.875 $\pm$ 0.018 & 0.0320 & 0.0114 \\
+    \midrule
+    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & +0.26 $\pm$ 0.11 & 30.51 & 0.881 $\pm$ 0.016 & 0.0309 & 0.0105 \\
+    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $-0.09$ $\pm$ 0.20 & 30.16 & 0.879 $\pm$ 0.015 & 0.0319 & 0.0112 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
 % -----------------------------------------------------------------------
 \section{Proposed Method: Self-Supervised Rectified Flow}
 \label{sec:method}
@@ -583,9 +634,12 @@ subject of an extended evaluation built on this benchmark.  We recommend
 future CT-denoising work report all five metrics in Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
-Results are single-seed on the abdomen window at 50 epochs; multi-anatomy
-and multi-seed runs, per-patient standard deviations, and completion of the
-truncated CTformer/CFM runs are in progress.  For the proposed self-supervised
+The main results (Table~\ref{tab:results}) are single-split on the abdomen
+window at 50 epochs; a three-fold patient-level cross-validation
+(Table~\ref{tab:cv}) confirms the supervised/self-supervised ordering is stable
+across patient partitions, albeit at a shorter 15-epoch budget.  Multi-anatomy
+runs, completion of the cross-validation at the full epoch budget, and
+completion of the truncated CTformer/CFM runs are in progress.  For the proposed self-supervised
 flow (Section~\ref{sec:method}) the four-step inference arm is still completing
 (ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
 multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
