@@ -95,8 +95,8 @@ self-supervision.
 
 Despite this progress, comparing methods fairly is difficult: published
 results use heterogeneous preprocessing pipelines, evaluation patches,
-normalisation conventions, and metric implementations.  We address this
-with CTDenoiser, a self-contained benchmark that:
+normalisation conventions, and metric implementations~\cite{eulig2024benchmark}.
+We address this with CTDenoiser, a self-contained benchmark that:
 
 \begin{itemize}
   \item provides a single training loop and evaluation harness usable
@@ -144,7 +144,16 @@ superior results, but inference requires hundreds to thousands of neural
 function evaluations (NFEs).  Conditional flow matching~\cite{lipman2022flow,
 albergo2022building} reduces this to as few as 10--50 NFEs by learning
 straight-line probability paths between source and target distributions,
-making it practical for clinical deployment.
+making it practical for clinical deployment.  Recent few-/single-step
+generative denoisers push this further: Poisson Flow Consistency Models
+(PFCM)~\cite{hein2025pfcm} distil a generative LDCT denoiser to a single step
+and report that an unconstrained generative process introduces substantial
+variability across denoised images, motivating fidelity-preserving
+sampling---a concern our self-supervised flow addresses by construction
+(Section~\ref{sec:method}).  More fundamentally, the perception--distortion
+trade-off~\cite{blau2018perception} establishes that minimising distortion
+necessarily costs perceptual realism for any distortion measure, the formal
+reason a generative denoiser can look realistic while being unfaithful.
 
 \paragraph{Self-supervised and zero-shot denoisers.}
 When paired full-dose targets are unavailable, denoisers can be trained
@@ -164,11 +173,39 @@ correlated as well as independent noise and remaining asymptotically
 equivalent to supervised learning; and Zero-Shot Noise2Noise
 (ZS-N2N)~\cite{mansour2023zsn2n} trains a tiny network per image from a
 downsampled Noise2Noise pair, requiring no external data, no noise model,
-and no pretraining.  More recently, Filter2Noise~\cite{sun2025filter2noise}
-couples self-supervised single-image training with an interpretable
-attention-guided bilateral filter designed specifically for LDCT.  Our
+and no pretraining.  In the vision literature, asymmetric pixel-shuffle
+downsampling (AP-BSN)~\cite{lee2022apbsn} breaks spatial correlation with a
+large training stride while preserving detail with a small inference stride,
+the mechanism most correlated-noise blind-spot successors build on.  More
+recently, Filter2Noise~\cite{sun2025filter2noise} couples self-supervised
+single-image training with an interpretable attention-guided bilateral
+filter designed specifically for LDCT, and WIA-LD2ND~\cite{zhao2024wia}
+performs self-supervised LDCT denoising in the wavelet domain.  Our
 benchmark includes Noise2Void, ZS-N2N, and Filter2Noise as label-free
 baselines and adds Noise2Sim as the correlated-noise-aware extension.
+
+\paragraph{Task-based and hallucination-aware evaluation.}
+\label{sec:rw-taskbased}
+Pixel-fidelity metrics such as PSNR and SSIM are increasingly recognised as
+poor proxies for diagnostic quality on medical images, both because they
+misrank novel restoration algorithms~\cite{breger2025reassess} and because
+they do not track radiologist perception of denoised
+CT~\cite{lee2025ldctiqa}.  The more rigorous standard is \emph{task-based}
+assessment: model observers such as the Channelized Hotelling Observer (CHO)
+estimate detectability ($d'$, AUC) on signal-known-exactly /
+background-known-statistically tasks.  Bhadra et al.~\cite{bhadra2021halluc}
+gave the first formal definition of hallucination in tomographic
+reconstruction via the measurement / null-space decomposition, and Tivnan et
+al.~\cite{tivnan2024halluc} introduced a Hallucination Index for generative
+reconstruction that distinguishes added noise from added structure.  Applied
+to denoisers specifically, Li et al.~\cite{li2021detection} showed that deep
+denoising can \emph{destroy} task-relevant information even as conventional
+image-quality metrics improve, and Kc \& Zeng~\cite{kc2024lgcho} found that
+quarter-dose denoised CT can beat full-dose on PSNR and SSIM while remaining
+\emph{inferior} on low-contrast detectability.  These works motivate the
+hallucination-aware, detectability-based evaluation we develop as the focus
+of an extended study; the present benchmark establishes the supervised and
+self-supervised substrate on which that evaluation is built.
 
 \paragraph{Evaluation metrics.}
 PSNR and SSIM are ubiquitous but favour pixel-level fidelity, potentially
@@ -533,11 +570,17 @@ the immediate next step.
 
 \paragraph{Metric selection.}
 PSNR and SSIM penalise any pixel-level deviation, even perceptually
-plausible detail, systematically disadvantaging generative models.  GMSD
-correlates better with perceptual judgements~\cite{xue2014gradient}, and
-NPS-ratio is directly interpretable by radiologists as a frequency-domain
-characterisation of residual noise.  We recommend future CT-denoising work
-report all five metrics in Table~\ref{tab:results}.
+plausible detail, systematically disadvantaging generative models; recent
+reassessments show both metrics misrank restoration algorithms on medical
+images~\cite{breger2025reassess} and fail to track radiologist
+perception~\cite{lee2025ldctiqa}.  GMSD correlates better with perceptual
+judgements~\cite{xue2014gradient}, and NPS-ratio is directly interpretable by
+radiologists as a frequency-domain characterisation of residual noise.  The
+stronger standard---task-based detectability via a model
+observer~\cite{li2021detection,kc2024lgcho}, together with explicit
+hallucination quantification~\cite{bhadra2021halluc,tivnan2024halluc}---is the
+subject of an extended evaluation built on this benchmark.  We recommend
+future CT-denoising work report all five metrics in Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
 Results are single-seed on the abdomen window at 50 epochs; multi-anatomy
@@ -653,7 +696,7 @@ C.~Niu and G.~Wang.
 \newblock \emph{arXiv preprint arXiv:2011.03384}, 2020.
 \newblock Published as ``Noise suppression with similarity-based
   self-supervised deep learning,'' \emph{IEEE Transactions on Medical Imaging},
-  2023.
+  42(6):1590--1602, 2023.
 
 \bibitem{mansour2023zsn2n}
 Y.~Mansour and R.~Heckel.
@@ -667,6 +710,83 @@ Y.~Sun, L.-S. Schneider, M.~Gu, S.~Mei, C.~Ye, F.~Wagner, S.~Bayer, and
 \newblock {Filter2Noise}: Interpretable self-supervised single-image denoising
   for low-dose {CT} with attention-guided bilateral filtering.
 \newblock \emph{arXiv preprint arXiv:2504.13519}, 2025.
+
+% --- ADDED 2026-06: lean must-cites supporting the task-based / hallucination
+% --- framing and the correlated-noise self-supervised cluster. Verify
+% --- volume/page/DOI metadata flagged with TODO before submission.
+
+\bibitem{lee2022apbsn}
+W.~Lee, S.~Son, and K.~M. Lee.
+\newblock {AP-BSN}: Self-supervised denoising for real-world images via
+  asymmetric {PD} and blind-spot network.
+\newblock In \emph{IEEE/CVF Conference on Computer Vision and Pattern
+  Recognition}, pages 17725--17734, 2022.
+
+\bibitem{zhao2024wia}
+H.~Zhao, Y.~Gu, Q.~Zhao, B.~Du, X.~Xu, and Y.~Yu.
+\newblock {WIA-LD2ND}: Wavelet-based image alignment for self-supervised
+  low-dose {CT} denoising.
+\newblock In \emph{Medical Image Computing and Computer-Assisted Intervention
+  (MICCAI)}, LNCS vol.\ 15007, 2024.
+% TODO verify page range.
+
+\bibitem{hein2025pfcm}
+D.~Hein, G.~Stevens, A.~Wang, and G.~Wang.
+\newblock {PFCM}: Poisson flow consistency models for low-dose {CT} image
+  denoising.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 44(7):2989--3001, 2025.
+
+\bibitem{blau2018perception}
+Y.~Blau and T.~Michaeli.
+\newblock The perception-distortion tradeoff.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  pages 6228--6237, 2018.
+
+\bibitem{bhadra2021halluc}
+S.~Bhadra, V.~A. Kelkar, F.~J. Brooks, and M.~A. Anastasio.
+\newblock On hallucinations in tomographic image reconstruction.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 40(11):3249--3260, 2021.
+
+\bibitem{tivnan2024halluc}
+M.~Tivnan, S.~Yoon, Z.~Chen, X.~Li, D.~Wu, and Q.~Li.
+\newblock Hallucination index: An image quality metric for generative
+  reconstruction models.
+\newblock In \emph{Medical Image Computing and Computer-Assisted Intervention
+  (MICCAI)}, LNCS vol.\ 15010, pages 449--458, 2024.
+
+\bibitem{li2021detection}
+K.~Li, W.~Zhou, H.~Li, and M.~A. Anastasio.
+\newblock Assessing the impact of deep neural network-based image denoising on
+  binary signal detection tasks.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 40(9):2295--2305, 2021.
+
+\bibitem{kc2024lgcho}
+P.~Kc and R.~Zeng.
+\newblock Assessing the performance of {CT} image denoisers using
+  {Laguerre-Gauss} channelized {Hotelling} observer for lesion detection.
+\newblock In \emph{IEEE Nuclear Science Symposium and Medical Imaging Conference
+  (NSS/MIC)}, 2024.
+\newblock arXiv:2412.02920.
+
+\bibitem{eulig2024benchmark}
+E.~Eulig, B.~Ommer, and M.~Kachelrie\ss.
+\newblock Benchmarking deep learning-based low-dose {CT} image denoising
+  algorithms.
+\newblock \emph{Medical Physics}, 51(12):8776--8788, 2024.
+
+\bibitem{breger2025reassess}
+A.~Breger, A.~Biguri, M.~S. Saba\'t\'e Landman, I.~Selby, N.~Amberg,
+  E.~Brunner, J.~Gr\"ohl, S.~Hatamikia, C.~Karner, L.~Ning, S.~Dittmer,
+  M.~Roberts, AIX-COVNET Collaboration, and C.-B. Sch\"onlieb.
+\newblock A study of why we need to reassess full reference image quality
+  assessment with medical images.
+\newblock \emph{Journal of Imaging Informatics in Medicine},
+  38(6):3444--3469, 2025.
+
+\bibitem{lee2025ldctiqa}
+W.~Lee, F.~Wagner, A.~Galdran, et~al.
+\newblock Low-dose computed tomography perceptual image quality assessment.
+\newblock \emph{Medical Image Analysis}, 99:103343, 2025.
 
 \bibitem{wang2004image}
 Z.~Wang, A.~C. Bovik, H.~R. Sheikh, and E.~P. Simoncelli.
