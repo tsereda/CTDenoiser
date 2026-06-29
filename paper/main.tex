@@ -20,8 +20,9 @@
 }
 
 % -----------------------------------------------------------------------
-\title{\textbf{CTDenoiser}: A Benchmark for Low-Dose CT Denoising\\
-       Across Supervised and Self-Supervised Regimes}
+\title{\textbf{CTDenoiser}: When Fidelity Gains Erode Detectability\\
+       A Benchmark for Low-Dose CT Denoising Across Supervised
+       and Self-Supervised Regimes}
 
 \author{%
   Tim Sereda\\
@@ -39,16 +40,16 @@ Low-dose computed tomography (LDCT) denoising is clinically important:
 reducing X-ray exposure introduces structured, spatially correlated noise
 that degrades diagnostic quality and that ordinary blind-spot
 self-supervision is not designed to handle.  We present \textbf{CTDenoiser},
-an open benchmark and single data/training/inference harness that evaluates
+an open benchmark and unified data, training, and inference harness that evaluates
 five architectures---RED-CNN, DnCNN, U-Net, CTformer, and a Conditional
 Flow Matching (CFM) model that frames denoising as an ODE transport from the
-noisy to the clean distribution---across five supervision regimes: fully
-\emph{supervised} training with paired full-dose targets, \emph{Noise2Sim}
-similarity-based self-supervision, \emph{Noise2Void} blind-spot
-self-supervision, \emph{Zero-Shot Noise2Noise} (ZS-N2N) per-image
+noisy to the clean distribution---across the supervision regimes for which
+they are defined: fully \emph{supervised} training with paired full-dose
+targets, \emph{Noise2Sim} similarity-based self-supervision, \emph{Noise2Void}
+blind-spot self-supervision, \emph{Zero-Shot Noise2Noise} (ZS-N2N) per-image
 optimisation, and \emph{Filter2Noise}.  Beyond PSNR, SSIM, and RMSE we
-report Gradient Magnitude Similarity Deviation (GMSD) and a Noise Power
-Spectrum ratio (NPS-ratio) that targets spurious high-frequency texture.  On
+report Gradient Magnitude Similarity Deviation (GMSD) and a Residual Spectral
+Ratio (RSR) that targets spurious high-frequency texture.  On
 the Mayo TCIA abdomen data, supervised models recover $\sim$4\,dB PSNR and
 $+0.046$ SSIM over the noisy input and finish within $0.1$\,dB of one another
 across CNN backbones, so the supervision signal matters more than the
@@ -57,13 +58,18 @@ Noise2Sim consistently beats the noisy baseline ($+0.5$ to $+1.2$\,dB) while
 blind-spot Noise2Void is flat-to-negative---direct evidence that CT's
 correlated noise violates the pixel-independence assumption behind blind-spot
 and downsampling methods.  Motivated by the resulting $3$--$4$\,dB
-self-supervised gap, we propose a \emph{self-supervised rectified flow with
-similarity-based noisy pairs} whose unconditional velocity field is a
-Noise2Noise estimator by construction.  It attains $+1.39$\,dB---the best
-label-free result in our benchmark, ahead of Noise2Sim---and an ablation shows
-\emph{one-step} inference is essential: multi-step Euler refinement steadily
-degrades fidelity (to $+0.04$\,dB), evidence that the decorrelated pairing,
-not iterative sampling, is what helps.  Finally, a task-based evaluation with
+self-supervised gap, our central methodological observation is that the
+velocity field of an \emph{unconditional} rectified flow, trained on two noisy
+observations of the same signal, recovers the Noise2Noise posterior mean---an
+MMSE denoiser---in a \emph{single} step, with no clean targets.  We instantiate
+this observation as SSFlow, pairing the unconditional flow with a
+similarity-based construction that decorrelates CT's spatially correlated
+noise; it attains $+1.39$\,dB, the best label-free result in our benchmark and
+ahead of Noise2Sim.  Consistent with the theory, an ablation confirms that the
+one-step posterior mean, not iterative sampling, is the operative estimator:
+multi-step Euler refinement does not help but steadily degrades fidelity (to
+$+0.04$\,dB), so the decorrelated pairing is what closes the gap.  Finally, a
+task-based evaluation with
 a channelized Hotelling observer over a three-seed patient cohort shows these
 fidelity gains do not translate into detectability: the same models that gain
 $\sim$4\,dB PSNR \emph{erode} lesion detectability by $6$--$9\%$ ($d'$ at
@@ -115,16 +121,18 @@ We address this with CTDenoiser, a self-contained benchmark that:
   \item evaluates on full CT slices via overlapped tiling rather than
         held-out patches;
   \item augments the standard pixel-fidelity metrics with GMSD and
-        NPS-ratio to surface the perceptual trade-offs of generative
-        denoisers.
+        a Residual Spectral Ratio (RSR) to surface the perceptual
+        trade-offs of generative denoisers.
 \end{itemize}
 
 Our contributions are: (i) the harness and a corrected full-slice
 evaluation (Section~\ref{sec:inference}); (ii) a controlled comparison
 showing supervised denoisers gain $\sim$4\,dB over the noisy input while
 the only label-free method to reliably beat it is the correlated-noise-aware
-Noise2Sim (Section~\ref{sec:results}); (iii) a proposed self-supervised
-rectified flow that targets the remaining gap (Section~\ref{sec:method}); and
+Noise2Sim (Section~\ref{sec:results}); (iii) the observation that an
+\emph{unconditional} rectified flow recovers the one-step Noise2Noise
+optimum without clean targets, together with its empirical instantiation
+SSFlow that targets the remaining gap (Section~\ref{sec:method}); and
 (iv) a task-based, hallucination-aware detectability evaluation---a channelized
 Hotelling observer with a corrected noise-power spectrum---showing the
 benchmark's PSNR/SSIM gains do not translate into low-contrast lesion
@@ -368,16 +376,20 @@ and reference images with Prewitt kernels and reports the standard
 deviation of the gradient-magnitude-similarity map; lower is better and no
 pretrained features are required.
 
-\paragraph{Noise Power Spectrum Ratio (NPS-ratio).}
+\paragraph{Residual Spectral Ratio (RSR).}
 \begin{equation}
-  \text{NPS-ratio} = \frac{\mathbb{E}\bigl[|\mathcal{F}(\hat{x}-x_1)|^2\bigr]}
-                          {\mathbb{E}\bigl[|\mathcal{F}(x_1)|^2\bigr] + \varepsilon},
+  \text{RSR} = \frac{\mathbb{E}\bigl[|\mathcal{F}(\hat{x}-x_1)|^2\bigr]}
+                    {\mathbb{E}\bigl[|\mathcal{F}(x_1)|^2\bigr] + \varepsilon},
   \label{eq:nps}
 \end{equation}
 where $\mathcal{F}$ is the 2-D DFT.  This measures the fraction of
 clean-image spectral energy present in the residual error and is sensitive
 to hallucinated high-frequency texture~\cite{gao2023corediff} that PSNR and
-SSIM may miss.
+SSIM may miss.  RSR is a frequency-domain \emph{error} ratio against the
+reference and should not be confused with the conventional CT noise-power
+spectrum (NPS), which characterises the spectrum of the noise itself,
+estimated from uniform-region ROIs; the latter is what we report as the NPS
+radial centroid in the task-based evaluation of Section~\ref{sec:detect}.
 
 % -----------------------------------------------------------------------
 \section{Experiments}
@@ -422,7 +434,7 @@ the floor every method must beat.
     \toprule
     \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
     PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
     \midrule
     LDCT input & --- (no denoising) & --- & 31.44 & 0.893 & 0.0274 & 0.166 & 0.0079 \\
     \midrule
@@ -452,7 +464,7 @@ the floor every method must beat.
   \end{tabular}
 \end{table*}
 
-Table~\ref{tab:results} yields three findings.  \textbf{First}, supervised
+Table~\ref{tab:results} yields four findings.  \textbf{First}, supervised
 denoising gains $\sim$4\,dB PSNR and $+0.046$ SSIM over the noisy input, and
 RED-CNN, U-Net, and DnCNN finish within $0.1$\,dB of one another despite a
 $3\times$ range in parameter count, so the objective dominates the backbone.
@@ -469,7 +481,7 @@ self-supervision, which motivates the method of Section~\ref{sec:method}.
 (SSFlow)---closes part of this gap: at $r{=}2$ it reaches $+1.39$\,dB, the best
 label-free result in the table and ahead of the strongest Noise2Sim backbone
 ($+1.18$\,dB), while also leading every label-free method on SSIM, RMSE, and
-NPS-ratio.
+RSR.
 CTformer and CFM runs were truncated by crashes and are reported at their
 last logged epoch; completing them, together with multi-anatomy and
 multi-seed evaluation, is in progress.
@@ -498,7 +510,7 @@ claim---is unchanged across every fold.
            15 epochs).  $\Delta$PSNR and SSIM are the mean ($\pm$ s.d.) across
            the three folds; the PSNR gain is measured against each fold's own
            LDCT-input floor ($31.44/30.04/29.27$\,dB for folds $1/2/3$).  PSNR,
-           RMSE, and NPS-ratio are fold means.  Only DnCNN and RED-CNN completed
+           RMSE, and RSR are fold means.  Only DnCNN and RED-CNN completed
            all three folds and are shown; U-Net had incomplete fold coverage at
            export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
            (single row each).  \textbf{Bold}: best per column.
@@ -508,7 +520,7 @@ claim---is unchanged across every fold.
     \toprule
     \textbf{Model} & \textbf{Supervision} &
     $\Delta$PSNR\,$\uparrow$ (dB) & PSNR\,$\uparrow$ & SSIM\,$\uparrow$ &
-    RMSE\,$\downarrow$ & NPS-r.\,$\downarrow$ \\
+    RMSE\,$\downarrow$ & RSR\,$\downarrow$ \\
     \midrule
     RED-CNN~\cite{chen2017lowdose} & Supervised & \textbf{+4.19 $\pm$ 0.22} & \textbf{34.43} & \textbf{0.927 $\pm$ 0.013} & \textbf{0.0195} & \textbf{0.0042} \\
     DnCNN~\cite{zhang2017beyond}   & Supervised & +4.04 $\pm$ 0.22 & 34.29 & 0.924 $\pm$ 0.015 & 0.0199 & 0.0044 \\
@@ -584,7 +596,7 @@ separately.
   \end{tabular}
 \end{table*}
 
-Table~\ref{tab:detect} shows three things.  \textbf{First}, the detectability
+Table~\ref{tab:detect} shows four things.  \textbf{First}, the detectability
 \emph{headroom} is small: the clean reference exceeds the noisy input by only
 $\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
 lesions are nearly as detectable in the noisy image as in the noise-free one.
@@ -601,7 +613,14 @@ report their largest, most confident gains.  \textbf{Third}, the supervised
 models that win most on PSNR also shift the noise-power-spectrum centroid
 furthest toward low frequency ($0.112 \!\to\! 0.088$, a $21\%$ drop, vs.\
 $0.112 \!\to\! 0.110$ for Noise2Void), the blotchy / ``waxy'' texture
-radiologists distrust.  Reporting the \emph{preserved} ratio
+radiologists distrust.  \textbf{Fourth}, the differences \emph{between}
+supervision regimes are not statistically resolved at this sample size: the
+preserved-detectability ratios at $160$\,HU ($0.929\,{\pm}\,0.035$ supervised,
+$0.918\,{\pm}\,0.029$ Noise2Sim, $0.921\,{\pm}\,0.026$ Noise2Void) overlap
+well within one standard deviation, so the data support the \emph{erosion}
+claim---every regime sits below $1.0$---but not a fine-grained regime-vs-regime
+detectability ranking; only the NPS-centroid shift cleanly separates supervised
+from blind-spot training.  Reporting the \emph{preserved} ratio
 $d'_\text{denoised}/d'_\text{input}$ rather than the raw index matters here: it
 cancels the large between-split variation in absolute $d'$ (s.d.\ $\pm1.57$ at
 $160$\,HU) and is stable across seeds ($\pm0.007$--$0.035$), isolating the
@@ -610,18 +629,27 @@ appears in PSNR or SSIM, which rise monotonically; task-based $d'$ is therefore
 a necessary complement to them, not an optional one.
 
 % -----------------------------------------------------------------------
-\section{Proposed Method: Self-Supervised Rectified Flow}
+\section{An Unconditional Rectified Flow is a One-Step Noise2Noise Denoiser}
 \label{sec:method}
 
 The results above leave a $3$--$4$\,dB gap between the best label-free
-method and supervised training.  We propose a denoiser that uses \emph{no}
-clean targets, built on rectified flow, and designed for the correlated
-noise of FBP-reconstructed LDCT.  It has two ingredients: an
-\emph{unconditional} flow whose learned velocity field is a Noise2Noise
-estimator, and a \emph{similarity-based} construction of the noisy pairs
-that keeps the paired noise independent despite spatial correlation.
+method and supervised training.  Our methodological contribution is an
+\emph{observation}: the velocity field of an \emph{unconditional} rectified
+flow, trained on two noisy observations of the same signal, has a minimiser
+that recovers the Noise2Noise posterior mean in a \emph{single} step
+(Section~\ref{sec:rf-n2n})---no clean targets, and no ODE integration
+required.  We then instantiate this observation as SSFlow, a denoiser
+designed for the correlated noise of FBP-reconstructed LDCT
+(Section~\ref{sec:ss-pairs}): it pairs the unconditional flow with a
+\emph{similarity-based} construction of the noisy pairs that keeps the
+paired noise independent despite spatial correlation.  An ablation
+(Section~\ref{sec:ss-pairs}) confirms the consequence of the observation
+that one might not expect of a ``flow''---multi-step refinement does not
+help---so SSFlow is best read as the empirical realisation of the one-step
+result rather than as iterative sampling.
 
 \subsection{Rectified flow as a Noise2Noise estimator}
+\label{sec:rf-n2n}
 Let $s$ be the (unobserved) clean slice and let $x_0=s+n_0,\ x_1=s+n_1$ be
 two noisy observations with $\mathbb{E}[n_i\mid s]=0$ and
 $n_0\perp n_1\mid s$.  Using the same straight-line interpolant
@@ -648,9 +676,14 @@ $v^\star(z,t)=\mathbb{E}[\,x_1-x_0\mid z_t=z\,]$.  At $t=0$, $z_0=x_0$, so
   \label{eq:ss-mmse}
 \end{equation}
 
-the MMSE denoiser, because $n_1$ is zero-mean and independent of $x_0$
-given $s$.  A single velocity evaluation thus recovers the
-Noise2Noise~\cite{lehtinen2018noise2noise} optimum from noisy pairs alone.
+the MMSE denoiser.  The last equality is the key step: by the tower property,
+$\mathbb{E}[x_1\mid x_0]=\mathbb{E}\!\left[\mathbb{E}[x_1\mid s,x_0]\mid
+x_0\right]=\mathbb{E}\!\left[s+\mathbb{E}[n_1\mid s,x_0]\mid x_0\right]
+=\mathbb{E}[s\mid x_0]$, where $\mathbb{E}[n_1\mid s,x_0]=\mathbb{E}[n_1\mid
+s]=0$ because $n_1\perp n_0\mid s$ (so conditioning on $x_0=s+n_0$ adds
+nothing beyond $s$) and $\mathbb{E}[n_i\mid s]=0$.  A single velocity
+evaluation thus recovers the Noise2Noise~\cite{lehtinen2018noise2noise}
+optimum from noisy pairs alone.
 
 \paragraph{Why the flow must be unconditional.}
 If the network is additionally given $x_0$ (as in
@@ -662,6 +695,7 @@ consistent with many pairs, forcing the network to predict their average
 velocity, where the independent noise cancels.
 
 \subsection{Similarity-based pairs and inference}
+\label{sec:ss-pairs}
 Equation~\eqref{eq:ss-mmse} requires two observations whose noise is
 independent given the signal.  FBP smears each detector reading across
 neighbouring pixels, so spatial-neighbour pairs
@@ -720,7 +754,7 @@ plausible detail, systematically disadvantaging generative models; recent
 reassessments show both metrics misrank restoration algorithms on medical
 images~\cite{breger2025reassess} and fail to track radiologist
 perception~\cite{lee2025ldctiqa}.  GMSD correlates better with perceptual
-judgements~\cite{xue2014gradient}, and NPS-ratio is directly interpretable by
+judgements~\cite{xue2014gradient}, and RSR is directly interpretable by
 radiologists as a frequency-domain characterisation of residual noise.  The
 stronger standard---task-based detectability via a model
 observer~\cite{li2021detection,kc2024lgcho}, together with explicit
@@ -752,15 +786,18 @@ can arise---is in progress.
 We presented CTDenoiser, a benchmark that trains and evaluates five LDCT
 denoising architectures under a shared, reproducible harness with a
 corrected full-slice evaluation and two CT-appropriate metrics (GMSD,
-NPS-ratio).  Once the evaluation is corrected, supervised denoisers gain
+RSR).  Once the evaluation is corrected, supervised denoisers gain
 $\sim$4\,dB over the noisy input, and among label-free methods only the
 correlated-noise-aware Noise2Sim reliably beats it while blind-spot
-Noise2Void degrades---quantifying a $3$--$4$\,dB gap.  To close it we
-proposed a self-supervised rectified flow with similarity-based noisy pairs
-whose unconditional velocity field is a Noise2Noise estimator by
-construction; it attains $+1.39$\,dB, the best label-free result in the
-benchmark, and an ablation shows one-step inference is essential while
-multi-step refinement degrades fidelity.  All code is released to facilitate
+Noise2Void degrades---quantifying a $3$--$4$\,dB gap.  Our central
+methodological observation is that an \emph{unconditional} rectified flow,
+trained on two noisy observations of the same signal, recovers the
+Noise2Noise posterior mean in a single step without clean targets; we
+instantiate it as SSFlow with similarity-based pairs that decorrelate CT
+noise, and it attains $+1.39$\,dB, the best label-free result in the
+benchmark.  Consistent with that observation, an ablation shows the one-step
+posterior mean is the operative estimator while multi-step refinement
+degrades fidelity.  All code is released to facilitate
 reproducibility.
 
 % -----------------------------------------------------------------------
