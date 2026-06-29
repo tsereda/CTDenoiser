@@ -63,7 +63,14 @@ Noise2Noise estimator by construction.  It attains $+1.39$\,dB---the best
 label-free result in our benchmark, ahead of Noise2Sim---and an ablation shows
 \emph{one-step} inference is essential: multi-step Euler refinement steadily
 degrades fidelity (to $+0.04$\,dB), evidence that the decorrelated pairing,
-not iterative sampling, is what helps.  All code, model definitions, and
+not iterative sampling, is what helps.  Finally, a task-based evaluation with
+a channelized Hotelling observer over a three-seed patient cohort shows these
+fidelity gains do not translate into detectability: the same models that gain
+$\sim$4\,dB PSNR \emph{erode} lesion detectability by $6$--$9\%$ ($d'$ at
+$160$\,HU) rather than improving it---without fabricating structure---and the
+strongest PSNR performers shift the noise-power spectrum most toward low
+frequency, changes PSNR and SSIM do not register.  All code, model
+definitions, and
 data-loading utilities are released at
 \href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
 \end{abstract}
@@ -116,8 +123,12 @@ Our contributions are: (i) the harness and a corrected full-slice
 evaluation (Section~\ref{sec:inference}); (ii) a controlled comparison
 showing supervised denoisers gain $\sim$4\,dB over the noisy input while
 the only label-free method to reliably beat it is the correlated-noise-aware
-Noise2Sim (Section~\ref{sec:results}); and (iii) a proposed self-supervised
-rectified flow that targets the remaining gap (Section~\ref{sec:method}).
+Noise2Sim (Section~\ref{sec:results}); (iii) a proposed self-supervised
+rectified flow that targets the remaining gap (Section~\ref{sec:method}); and
+(iv) a task-based, hallucination-aware detectability evaluation---a channelized
+Hotelling observer with a corrected noise-power spectrum---showing the
+benchmark's PSNR/SSIM gains do not translate into low-contrast lesion
+detectability (Section~\ref{sec:detect}).
 
 % -----------------------------------------------------------------------
 \section{Related Work}
@@ -203,9 +214,9 @@ denoising can \emph{destroy} task-relevant information even as conventional
 image-quality metrics improve, and Kc \& Zeng~\cite{kc2024lgcho} found that
 quarter-dose denoised CT can beat full-dose on PSNR and SSIM while remaining
 \emph{inferior} on low-contrast detectability.  These works motivate the
-hallucination-aware, detectability-based evaluation we develop as the focus
-of an extended study; the present benchmark establishes the supervised and
-self-supervised substrate on which that evaluation is built.
+hallucination-aware, detectability-based evaluation we report on this
+benchmark's supervised and self-supervised models in
+Section~\ref{sec:detect}.
 
 \paragraph{Evaluation metrics.}
 PSNR and SSIM are ubiquitous but favour pixel-level fidelity, potentially
@@ -514,6 +525,90 @@ claim---is unchanged across every fold.
   \end{tabular}
 \end{table*}
 
+\subsection{Task-based detectability}
+\label{sec:detect}
+
+Pixel-fidelity gains need not be diagnostic gains.  We test this directly with
+a Channelized Hotelling Observer (CHO) on a signal-known-exactly /
+background-known-statistically (SKE/BKS) task.  No CT forward projector is
+needed: because the dataset provides real paired low/full acquisitions, the
+real spatially-correlated FBP noise is $n = x_\text{low} - x_\text{full}$, so a
+signal-present low-dose image is \emph{literally} $x_\text{low} + s$ for a known
+lesion $s$ (the same correlated noise is re-attached by construction), and the
+signal-absent image is the untouched acquisition.  We insert Gaussian lesions of
+radius $4$\,px at $40/80/160$\,HU on flat in-body sites ($6$ per slice, $200$
+slices per run), extract present/absent ROIs at the \emph{input}, \emph{denoised}
+and \emph{clean} stages, channelise with ten Laguerre-Gauss channels, and compute
+the detectability index $d'$.  The observer is validated against the closed-form
+white-noise value $d' = \lVert s\rVert / \sigma$ as a unit test before use.  We
+run it on the three-seed cross-validation models of Table~\ref{tab:cv} (all four
+trainable architectures) and report the mean over architectures and seeds.  The
+per-image methods (ZS-N2N, Filter2Noise) are omitted---each CHO realisation would
+retrain their per-image network thousands of times---and the generative
+SSFlow/CFM detectability, which can \emph{fabricate} as well as erode, is reported
+separately.
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{Task-based detectability on the three-seed cross-validation models
+           (Table~\ref{tab:cv}); mean over $4$ architectures $\times$ $3$ seeds.
+           \emph{Top:} CHO detectability index $d'$ for the noisy input (floor)
+           and clean reference (ceiling) at three lesion contrasts; these are
+           method-independent and carry a large between-split (patient-cohort)
+           s.d.\ ($\pm1.6$ at $160$\,HU), which is why we report the ratio below.
+           \emph{Bottom:} detectability \emph{preserved},
+           $d'_\text{denoised}/d'_\text{input}$ (mean\,$\pm$\,s.d.; $1.0=$
+           unchanged, $<1=$ eroded), and the denoised noise-power-spectrum radial
+           centroid (input $0.112$; lower $=$ more low-frequency ``waxy''
+           texture).  Architecture differences are within s.d., so rows are
+           aggregated by supervision regime.  $d'_\text{denoised}$ is below
+           $d'_\text{input}$ in all $36$ runs and never exceeds the clean
+           ceiling.}
+  \label{tab:detect}
+  \begin{tabular}{lcccc}
+    \toprule
+     & \multicolumn{3}{c}{lesion contrast (HU)} & NPS \\
+    \cmidrule(lr){2-4}
+     & $40$ & $80$ & $160$ & centroid\,$\downarrow$ \\
+    \midrule
+    \multicolumn{5}{l}{\emph{Reference $d'$ (method-independent)}} \\
+    \quad input (floor)   & $1.51$ & $3.03$ & $6.06$ & $0.112$ \\
+    \quad clean (ceiling) & $1.54$ & $3.09$ & $6.18$ & --- \\
+    \midrule
+    \multicolumn{5}{l}{\emph{Detectability preserved $d'_\text{den}/d'_\text{in}$}} \\
+    \quad Supervised & $1.023\,{\pm}\,0.007$ & $1.013\,{\pm}\,0.009$ & $0.929\,{\pm}\,0.035$ & $0.088\,{\pm}\,0.004$ \\
+    \quad Noise2Sim  & $1.007\,{\pm}\,0.006$ & $0.995\,{\pm}\,0.007$ & $0.918\,{\pm}\,0.029$ & $0.101\,{\pm}\,0.005$ \\
+    \quad Noise2Void & $1.003\,{\pm}\,0.007$ & $0.994\,{\pm}\,0.008$ & $0.921\,{\pm}\,0.026$ & $0.110\,{\pm}\,0.007$ \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+Table~\ref{tab:detect} shows three things.  \textbf{First}, the detectability
+\emph{headroom} is small: the clean reference exceeds the noisy input by only
+$\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
+lesions are nearly as detectable in the noisy image as in the noise-free one.
+\textbf{Second}, although these same models gain $4.0$--$4.2$\,dB PSNR
+(supervised) and $1.4$--$1.7$\,dB (Noise2Sim) over the input
+(Table~\ref{tab:cv}), none improves detectability at the supra-threshold
+operating point: $d'_\text{denoised} < d'_\text{input}$ in all $36$ runs---a
+$6$--$9\%$ loss at $160$\,HU---and none exceeds the clean ceiling, so the
+deterministic denoisers \emph{erode} detectability without \emph{fabricating}
+it.  The erosion is contrast-dependent: near the detection threshold
+($40$\,HU) detectability is preserved to within $1$--$2\%$, so the loss
+concentrates precisely at the high-contrast operating point where PSNR and SSIM
+report their largest, most confident gains.  \textbf{Third}, the supervised
+models that win most on PSNR also shift the noise-power-spectrum centroid
+furthest toward low frequency ($0.112 \!\to\! 0.088$, a $21\%$ drop, vs.\
+$0.112 \!\to\! 0.110$ for Noise2Void), the blotchy / ``waxy'' texture
+radiologists distrust.  Reporting the \emph{preserved} ratio
+$d'_\text{denoised}/d'_\text{input}$ rather than the raw index matters here: it
+cancels the large between-split variation in absolute $d'$ (s.d.\ $\pm1.57$ at
+$160$\,HU) and is stable across seeds ($\pm0.007$--$0.035$), isolating the
+denoiser's effect.  None of this contrast-dependent erosion or texture shift
+appears in PSNR or SSIM, which rise monotonically; task-based $d'$ is therefore
+a necessary complement to them, not an optional one.
+
 % -----------------------------------------------------------------------
 \section{Proposed Method: Self-Supervised Rectified Flow}
 \label{sec:method}
@@ -629,9 +724,12 @@ judgements~\cite{xue2014gradient}, and NPS-ratio is directly interpretable by
 radiologists as a frequency-domain characterisation of residual noise.  The
 stronger standard---task-based detectability via a model
 observer~\cite{li2021detection,kc2024lgcho}, together with explicit
-hallucination quantification~\cite{bhadra2021halluc,tivnan2024halluc}---is the
-subject of an extended evaluation built on this benchmark.  We recommend
-future CT-denoising work report all five metrics in Table~\ref{tab:results}.
+hallucination quantification~\cite{bhadra2021halluc,tivnan2024halluc}---is
+reported in Section~\ref{sec:detect}: on these benchmark models the CHO
+confirms that the PSNR/SSIM gains overstate task performance, with
+low-contrast detectability eroded rather than improved.  We recommend future
+CT-denoising work report task-based $d'$ alongside the five metrics in
+Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
 The main results (Table~\ref{tab:results}) are single-split on the abdomen
@@ -643,7 +741,10 @@ completion of the truncated CTformer/CFM runs are in progress.  For the proposed
 flow (Section~\ref{sec:method}) the four-step inference arm is still completing
 (ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
 multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
-finalised.
+finalised.  The detectability evaluation (Section~\ref{sec:detect}) covers the
+15-epoch cross-validation models and the deterministic denoisers; the
+generative SSFlow and CFM detectability---where fabrication, not just erosion,
+can arise---is in progress.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
