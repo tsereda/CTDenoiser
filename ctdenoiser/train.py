@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 try:
@@ -43,7 +44,12 @@ from .detectability import run_detectability_eval
 from .inference import overlapped_inference
 from .metrics import gmsd, nps_ratio, psnr, rmse, ssim
 from .models import CTformer, DnCNN, FlowMatching, REDCNN, SelfSupervisedFlow, UNet
-from .selfsupervised import n2sim_training_step, n2v_training_step
+from .selfsupervised import (
+    make_similarity_target,
+    n2sim_training_step,
+    n2v_training_step,
+    replace_with_neighbors,
+)
 from .zeroshot import denoise_image as zsn2n_denoise_image
 from .zeroshot import denoise_image_f2n as f2n_denoise_image
 
@@ -267,6 +273,22 @@ def identity_baseline(loader, device):
         for k, fn in _METRIC_FNS.items():
             per_sample[k].append(fn(pred, full))
     return _summarize(per_sample)
+
+
+def _match_shape(pred, ref):
+    """Pad ``pred`` back to ``ref``'s spatial size with replicate borders.
+
+    The per-image denoisers crop odd H/W to even before their pair-downsampler
+    loss; the detectability eval, however, samples ROI sites on the full-size
+    reference, so every stage (input / denoised / clean) must share one geometry.
+    Padding the (at most one) dropped row/column back keeps the sites aligned;
+    the affected border is outside the flat interior where lesions are placed.
+    """
+    dh = ref.shape[-2] - pred.shape[-2]
+    dw = ref.shape[-1] - pred.shape[-1]
+    if dh or dw:
+        pred = F.pad(pred, (0, dw, 0, dh), mode="replicate")
+    return pred
 
 
 def run_zsn2n_eval(loader, device, args):
@@ -493,7 +515,8 @@ def main(argv=None):
                         help="after training, run the task-based CHO/NPS "
                              "detectability eval once on the best model and log "
                              "det/* metrics (see ctdenoiser.detectability). "
-                             "Skipped for per-image modes (zsn2n/f2n).")
+                             "Per-image modes (zsn2n/f2n) use the smaller "
+                             "--detectability-periimage-max-slices budget.")
     parser.add_argument("--detectability-contrasts-hu", type=float, nargs="+",
                         default=[40.0, 80.0, 160.0], metavar="HU",
                         help="inserted lesion contrast(s) in HU; multiple values "
@@ -506,13 +529,13 @@ def main(argv=None):
                         help="lesion sites sampled per slice for the CHO eval")
     parser.add_argument("--detectability-max-slices", type=int, default=0,
                         help="cap slices used by the detectability eval (0=all val)")
+    parser.add_argument("--detectability-periimage-max-slices", type=int, default=25,
+                        help="separate, smaller slice cap for the detectability eval "
+                             "in the per-image modes (zsn2n/f2n): each ROI denoise is "
+                             "a full from-scratch optimisation (~4 per slice), so this "
+                             "keeps the eval to minutes not hours (0=use "
+                             "--detectability-max-slices)")
     args = parser.parse_args(argv)
-
-    if args.training_mode in ("n2v", "n2sim") and args.model == "flowmatching":
-        parser.error(
-            "flowmatching needs paired clean targets; it is incompatible with "
-            f"--training-mode {args.training_mode}. Use --training-mode supervised."
-        )
 
     if (args.model == "ssflow") != (args.training_mode == "ssflow"):
         parser.error(
@@ -583,29 +606,74 @@ def main(argv=None):
     # eval time; they have no shared model, training loop, or checkpoint, so they
     # short-circuit here.
     if args.training_mode in ("zsn2n", "f2n"):
-        if args.eval_detectability:
-            # CHO needs present+absent denoises per ROI ensemble; for per-image
-            # methods each denoise is a full from-scratch optimisation, so a
-            # detectability eval would retrain the net thousands of times. Skip.
-            print(f"detectability eval not supported for per-image mode "
-                  f"{args.training_mode}; skipping.")
         if args.training_mode == "zsn2n":
             metrics = run_zsn2n_eval(val_loader, device, args)
+
+            def periimage_denoise(low):
+                pred = zsn2n_denoise_image(
+                    low, num_iters=args.zsn2n_iters, lr=args.zsn2n_lr,
+                    num_channels=args.zsn2n_channels, device=device, seed=args.seed,
+                ).clamp(0.0, 1.0)
+                return _match_shape(pred, low)
         else:
             metrics = run_f2n_eval(val_loader, device, args)
+
+            def periimage_denoise(low):
+                pred = f2n_denoise_image(
+                    low, num_iters=args.f2n_iters, lr=args.f2n_lr,
+                    num_layers=args.f2n_layers, radius=args.f2n_radius,
+                    num_channels=args.f2n_channels, device=device, seed=args.seed,
+                ).clamp(0.0, 1.0)
+                return _match_shape(pred, low)
         print(
             f"eval ({args.training_mode})  psnr={metrics['psnr']:.3f}  "
             f"ssim={metrics['ssim']:.4f}  rmse={metrics['rmse']:.5f}  "
             f"gmsd={metrics['gmsd']:.5f}  nps_ratio={metrics['nps_ratio']:.5f}"
         )
+
+        # Task-based detectability for the per-image methods. Each ROI denoise is
+        # a full from-scratch optimisation (~4 calls/slice), so a separate, much
+        # smaller slice budget keeps the eval to minutes rather than the hours a
+        # full-val pass would add on top of an already long per-image run.
+        det = None
+        if args.eval_detectability:
+            cap = (args.detectability_periimage_max_slices
+                   or args.detectability_max_slices)
+            print(
+                f"detectability ({args.training_mode}): re-denoising up to {cap} "
+                f"slices (each ~4 from-scratch optimisations)..."
+            )
+            det = run_detectability_eval(
+                periimage_denoise, val_loader, device, hu_scale=args.hu_scale,
+                contrast_hu=args.detectability_contrasts_hu,
+                roi_size=args.detectability_roi_size,
+                sites_per_slice=args.detectability_sites,
+                max_slices=cap, seed=args.seed,
+            )
+            print(
+                f"detectability @{max(args.detectability_contrasts_hu):g}HU  "
+                f"d'(input)={det['d_prime_input']:.3f} -> "
+                f"d'(denoised)={det['d_prime_denoised']:.3f} "
+                f"(clean ceiling {det['d_prime_clean']:.3f})  "
+                f"preserved={det['detectability_preserved']:.3f}  "
+                f"fabrication d'={det['d_prime_fabrication']:.3f}"
+            )
+
         if _wb:
             _wb.log({f"val/{k}": v for k, v in metrics.items()})
+            if det is not None:
+                _wb.log({f"det/{k}": v for k, v in det.items()})
             _wb.finish()
         return
 
-    if args.model == "flowmatching":
-        model = FlowMatching(num_steps=args.flow_steps).to(device)
-    elif args.model == "ssflow":
+    # flowmatching is the *conditional* (clean-target) flow. Its self-supervised
+    # counterpart must be the *unconditional* velocity net: conditioning on the
+    # noisy input would let the flow reproduce the self-supervised target's own
+    # noise instead of averaging it away (see ctdenoiser.models.ssflow). So under
+    # n2v/n2sim we train the unconditional SelfSupervisedFlow, with the mode's
+    # self-supervised target supplied as the flow endpoint in the loop below.
+    flow_selfsup = args.model == "flowmatching" and args.training_mode in ("n2v", "n2sim")
+    if args.model == "ssflow":
         model = SelfSupervisedFlow(
             num_steps=args.flow_steps,
             pairing=args.ssflow_pairing,
@@ -614,6 +682,10 @@ def main(argv=None):
             num_similar=args.ssflow_num_similar,
             exclude_radius=args.ssflow_exclude_radius,
         ).to(device)
+    elif flow_selfsup:
+        model = SelfSupervisedFlow(num_steps=args.flow_steps).to(device)
+    elif args.model == "flowmatching":
+        model = FlowMatching(num_steps=args.flow_steps).to(device)
     else:
         model = MODELS[args.model]().to(device)
 
@@ -639,20 +711,43 @@ def main(argv=None):
             low = low.to(device)
             optimizer.zero_grad()
             if args.training_mode == "n2v":
-                # Self-supervised: clean target ignored, train on noisy input only.
-                loss = n2v_training_step(
-                    model, low,
-                    mask_fraction=args.n2v_mask_fraction,
-                    neighbor_radius=args.n2v_neighbor_radius,
-                )
+                if isinstance(model, SelfSupervisedFlow):
+                    # N2V flavour of the unconditional self-supervised flow:
+                    # resampling every pixel from a random neighbour yields a
+                    # second noisy look (shared signal, ~independent noise) that
+                    # serves as the flow's target endpoint x1.
+                    full_mask = torch.ones_like(low, dtype=torch.bool)
+                    target = replace_with_neighbors(
+                        low, full_mask, radius=args.n2v_neighbor_radius
+                    )
+                    loss = model.flow_loss_to_target(low, target)
+                else:
+                    # Self-supervised: clean target ignored, train on noisy input only.
+                    loss = n2v_training_step(
+                        model, low,
+                        mask_fraction=args.n2v_mask_fraction,
+                        neighbor_radius=args.n2v_neighbor_radius,
+                    )
             elif args.training_mode == "n2sim":
-                # Self-supervised: similarity target from the noisy image itself.
-                loss = n2sim_training_step(
-                    model, low,
-                    search_radius=args.n2sim_search_radius,
-                    patch_radius=args.n2sim_patch_radius,
-                    num_similar=args.n2sim_num_similar,
-                )
+                if isinstance(model, SelfSupervisedFlow):
+                    # Noise2Sim target (independent-noise non-local match) as the
+                    # endpoint of the unconditional flow -> the principled
+                    # self-supervised rectified flow for correlated CT noise.
+                    target = make_similarity_target(
+                        low,
+                        search_radius=args.n2sim_search_radius,
+                        patch_radius=args.n2sim_patch_radius,
+                        num_similar=args.n2sim_num_similar,
+                    )
+                    loss = model.flow_loss_to_target(low, target)
+                else:
+                    # Self-supervised: similarity target from the noisy image itself.
+                    loss = n2sim_training_step(
+                        model, low,
+                        search_radius=args.n2sim_search_radius,
+                        patch_radius=args.n2sim_patch_radius,
+                        num_similar=args.n2sim_num_similar,
+                    )
             elif args.training_mode == "ssflow":
                 # Self-supervised rectified flow on manufactured noisy pairs.
                 loss = model.ss_flow_loss(low)

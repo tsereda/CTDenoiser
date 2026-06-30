@@ -34,6 +34,31 @@ def test_ss_flow_loss_is_scalar_and_differentiable():
     assert grads, "no gradients flowed into the velocity network"
 
 
+def test_flow_loss_to_target_is_scalar_and_differentiable():
+    # Used by the flowmatching + n2v/n2sim path: explicit endpoints, not _build_pair.
+    model = SelfSupervisedFlow(num_filters=8, embed_dim=16)
+    x0 = torch.rand(2, 1, 32, 32)
+    x1 = torch.rand(2, 1, 32, 32)
+    loss = model.flow_loss_to_target(x0, x1)
+    assert loss.ndim == 0 and loss.item() >= 0.0
+    loss.backward()
+    grads = [p.grad for p in model.net.parameters() if p.grad is not None]
+    assert grads, "no gradients flowed into the velocity network"
+
+
+def test_ss_flow_loss_delegates_to_flow_loss_to_target():
+    # Same endpoints -> same loss (ss_flow_loss is flow_loss_to_target on _build_pair).
+    torch.manual_seed(0)
+    model = SelfSupervisedFlow(num_filters=8, embed_dim=16, search_radius=2)
+    noisy = torch.rand(2, 1, 32, 32)
+    x0, x1 = model._build_pair(noisy)
+    torch.manual_seed(123)
+    a = model.flow_loss_to_target(x0, x1)
+    torch.manual_seed(123)
+    b = model.flow_loss_to_target(x0, x1)
+    assert torch.allclose(a, b)
+
+
 def test_forward_preserves_shape_one_step_and_multistep():
     x = torch.rand(2, 1, 32, 32)
     one = SelfSupervisedFlow(num_filters=8, embed_dim=16, num_steps=1)

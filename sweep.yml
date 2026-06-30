@@ -4,17 +4,23 @@ method: grid
 entity: timgsereda
 project: ctdenoiser-sweep
 
-# Sweep over every model architecture AND every training method exposed by
-# ctdenoiser.train. Parameter keys use hyphens so W&B's ${args} macro emits the
-# exact CLI flags argparse expects (e.g. --training-mode, --n2v-mask-fraction).
+# Main benchmark: every model architecture x the architecture-dependent training
+# methods (supervised / n2v / n2sim). Grid = 5 models x 3 modes x 3 seeds = 45.
+# Parameter keys use hyphens so W&B's ${args} macro emits the exact CLI flags
+# argparse expects (e.g. --training-mode, --n2v-mask-fraction).
 #
-# Some combinations in this grid are special-cased by train.py:
-#   * flowmatching + n2v/n2sim -> rejected (flow matching needs paired clean
-#                            targets); those runs fail fast and can be ignored.
-#   * zsn2n / f2n (any model) -> train a fresh per-image net and ignore --model,
-#                            so the 5 runs per per-image mode are equivalent.
+# The per-image methods (zsn2n, f2n) ignore --model, so they are split out into
+# sweep_periimage.yml to avoid 5x byte-identical reruns; run both sweeps for the
+# full method table.
+#
+# One combination is special-cased by train.py:
+#   * flowmatching + n2v/n2sim -> trains the *unconditional* self-supervised flow
+#                            (ctdenoiser.models.ssflow) with the mode's target as
+#                            the flow endpoint; the conditional flow would reproduce
+#                            the target's noise, so the unconditional net is the
+#                            correct self-supervised counterpart.
 parameters:
-  # Core architectures (used by supervised / n2v / n2sim; ignored by zsn2n / f2n).
+  # Core architectures (each trained by supervised / n2v / n2sim).
   model:
     values:
       - redcnn
@@ -23,14 +29,15 @@ parameters:
       - ctformer
       - flowmatching
 
-  # Training methods / core functions.
+  # Training methods that depend on the architecture. The per-image methods
+  # (zsn2n, f2n) train a fresh net and ignore --model, so they are *not* swept
+  # here -- replicating them across the 5 models would be byte-identical reruns.
+  # They live in sweep_periimage.yml (2 modes x 3 seeds = 6 runs) instead.
   training-mode:
     values:
       - supervised   # clean-target MSE / flow-matching loss
       - n2v          # Noise2Void blind-spot self-supervision
       - n2sim        # Noise2Sim similarity-based self-supervision
-      - zsn2n        # Zero-Shot Noise2Noise per-image test-time training
-      - f2n          # Filter2Noise per-image attention-guided bilateral filtering
 
   epochs:
     value: 50
@@ -60,26 +67,6 @@ parameters:
   n2sim-num-similar:
     value: 1
 
-  # Zero-Shot Noise2Noise per-image optimisation
-  zsn2n-iters:
-    value: 2000
-  zsn2n-channels:
-    value: 48
-  zsn2n-lr:
-    value: 0.001
-
-  # Filter2Noise per-image attention-guided bilateral filtering
-  f2n-iters:
-    value: 1500
-  f2n-layers:
-    value: 2
-  f2n-radius:
-    value: 3
-  f2n-channels:
-    value: 16
-  f2n-lr:
-    value: 0.001
-
   # Flow matching ODE sampling steps (flowmatching model only)
   flow-steps:
     value: 20
@@ -98,10 +85,12 @@ command:
   # at the end of each run -> logged as det/* (+ det/c{hu}/* contrast-detail
   # curve) alongside PSNR/SSIM. Appended in `command` (not `parameters`) because
   # it is a store_true flag and W&B's ${args} macro would emit
-  # `--eval-detectability=True`, which argparse rejects. No-op for the per-image
-  # zsn2n/f2n runs (they print a skip and continue).
+  # `--eval-detectability=True`, which argparse rejects.
   - --eval-detectability
   # The CHO re-denoises present/absent ROIs per contrast, so cap the slice count
   # to keep the end-of-run eval bounded (200 slices x 6 sites is ample for a
   # stable d'); drop the flag to use the full val set.
   - --detectability-max-slices=200
+  # Per-image modes (zsn2n/f2n) re-train a fresh net for every ROI denoise, so
+  # they use a much smaller detectability budget to stay in the minutes range.
+  - --detectability-periimage-max-slices=25
