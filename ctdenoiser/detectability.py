@@ -361,10 +361,20 @@ def run_detectability_eval(denoise, loader, device, *, hu_scale,
     preserves, erases, or fabricates the lesion. A reference-free NPS centroid is
     also tracked (input vs denoised) to flag blotchy / "waxy" texture.
 
+    Alongside erosion (does a *present* lesion survive?) the eval also reports a
+    contrast-free **fabrication index** (does the denoiser *invent* lesion-scale
+    structure where the truth has none?): ``d_prime_fabrication`` is a CHO ``d'``
+    discriminating the denoiser's signal-absent output from the ground-truth
+    clean image, with ``d_prime_fabrication_input`` (the raw noise vs clean) as
+    the ~0 floor. Together they map the full erosion <-> fabrication axis that the
+    perception--distortion / hallucination literature warns generative denoisers
+    trade along.
+
     Returns a flat dict of scalars for W&B / CSV logging. Per-contrast metrics are
     keyed ``c{hu}/d_prime_*`` etc.; the highest (most detectable) contrast is also
     emitted un-prefixed (``d_prime_*``, ``detectability_preserved``, ...) as the
-    headline operating point. NPS / noise-power and ``n_slices`` are contrast-free.
+    headline operating point. NPS / noise-power, fabrication and ``n_slices`` are
+    contrast-free.
     """
     from .metrics import uniform_nps
 
@@ -429,6 +439,27 @@ def run_detectability_eval(denoise, loader, device, *, hu_scale,
     results = {"n_slices": n_slices}
     abs_cat = {s: torch.cat(absent[s], 0) for s in stages}
     headline_ci = len(contrasts) - 1
+
+    # Fabrication / hallucination index (contrast-free; the symmetric counterpart
+    # to detectability erosion). Erosion asks "is a *present* lesion washed out?";
+    # fabrication asks "is structure *invented* where the truth has none?". We
+    # answer it with the same Hotelling machinery on the signal-ABSENT ensembles:
+    # discriminate the denoiser's output ``denoise(low)`` from the ground-truth
+    # clean ``full`` over the flat (lesion-free) ROIs, in the lesion-scale
+    # Laguerre-Gauss subspace. The BKS template (empirical channel-mean
+    # difference, ``signal=None``) is used deliberately so the fabricated
+    # structure need not be a centred lesion. A faithful denoiser removes only
+    # zero-mean noise, so its absent output is indistinguishable from truth and
+    # ``d'_fab -> 0``; a denoiser that paints blotchy / "waxy" or lesion-like
+    # structure becomes separable from truth and ``d'_fab > 0``. Residual noise is
+    # zero-mean and so loads the covariance, not the mean difference, isolating
+    # *systematic* fabricated structure (the hallucination-bias component). The
+    # input-vs-clean value is reported alongside as the noise floor (~0).
+    fab = cho_detectability(abs_cat["denoised"], abs_cat["clean"], n_channels=n_channels)
+    fab_floor = cho_detectability(abs_cat["input"], abs_cat["clean"], n_channels=n_channels)
+    results["d_prime_fabrication"] = fab["d_prime"]
+    results["auc_fabrication"] = fab["auc"]
+    results["d_prime_fabrication_input"] = fab_floor["d_prime"]
     for ci, c in enumerate(contrasts):
         per = {}
         for st in stages:

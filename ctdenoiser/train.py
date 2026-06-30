@@ -711,6 +711,8 @@ def main(argv=None):
             f"d'(denoised)={det['d_prime_denoised']:.3f} "
             f"(clean ceiling {det['d_prime_clean']:.3f})  "
             f"preserved={det['detectability_preserved']:.3f}  "
+            f"fabrication d'={det['d_prime_fabrication']:.3f} "
+            f"(floor {det['d_prime_fabrication_input']:.3f})  "
             f"nps_freq {det['nps_mean_freq_input']:.3f}->"
             f"{det['nps_mean_freq_denoised']:.3f}"
         )

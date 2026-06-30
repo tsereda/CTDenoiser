@@ -128,6 +128,56 @@ def test_cho_detects_stronger_signal_better():
     assert d_strong > d_weak
 
 
+# ----- Fabrication / hallucination index -----
+
+def test_fabrication_index_is_chance_when_output_matches_truth():
+    """A faithful denoiser (truth + independent zero-mean residual) invents no
+    structure, so discriminating its absent output from the clean truth is
+    chance (d' ~ 0)."""
+    torch.manual_seed(0)
+    clean = 0.5 + 0.02 * torch.randn(2000, 24, 24)
+    denoised = clean + 0.02 * torch.randn(2000, 24, 24)  # only zero-mean residual
+    out = cho_detectability(denoised, clean, n_channels=10)
+    assert out["d_prime"] < 0.5
+    assert out["auc"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_fabrication_index_fires_on_invented_structure():
+    """Painting a lesion-scale bump into the (signal-absent) output makes it
+    separable from the clean truth -> large fabrication d'."""
+    torch.manual_seed(0)
+    bump = signal_template((24, 24), (12, 12), 3, contrast_hu=0.05, hu_scale=1.0,
+                           profile="gaussian")
+    clean = 0.5 + 0.02 * torch.randn(2000, 24, 24)
+    faithful = clean + 0.02 * torch.randn(2000, 24, 24)
+    hallucinated = clean + 0.02 * torch.randn(2000, 24, 24) + bump[None]
+    d_faithful = cho_detectability(faithful, clean, n_channels=10)["d_prime"]
+    d_hallucinated = cho_detectability(hallucinated, clean, n_channels=10)["d_prime"]
+    assert d_hallucinated > 2.0
+    assert d_hallucinated > 5 * d_faithful
+
+
+def test_run_detectability_eval_reports_fabrication_floor_for_identity():
+    """End-to-end: the identity denoiser's output *is* the noisy input, so its
+    fabrication d' must equal the input-vs-clean floor exactly (it invents
+    nothing beyond the real noise already present)."""
+    torch.manual_seed(0)
+    loader = []
+    for _ in range(4):
+        full = 0.5 * torch.ones(1, 1, 96, 96)
+        low = (full + 0.04 * torch.randn(1, 1, 96, 96)).clamp(0, 1)
+        loader.append((low, full))
+
+    res = run_detectability_eval(
+        lambda x: x, loader, torch.device("cpu"), hu_scale=400.0,
+        contrast_hu=40.0, roi_size=24, sites_per_slice=4,
+    )
+    assert "d_prime_fabrication" in res and "auc_fabrication" in res
+    assert res["d_prime_fabrication"] == pytest.approx(
+        res["d_prime_fabrication_input"], abs=1e-6
+    )
+
+
 # ----- Corrected NPS -----
 
 def test_residual_spectrum_alias_matches_legacy_name():

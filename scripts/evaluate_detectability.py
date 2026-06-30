@@ -144,6 +144,8 @@ def main(argv=None):
         f"d'(denoised)={res['d_prime_denoised']:.3f}  "
         f"d'(clean)={res['d_prime_clean']:.3f}  "
         f"preserved={res['detectability_preserved']:.3f}  "
+        f"fabrication d'={res['d_prime_fabrication']:.3f} "
+        f"(floor {res['d_prime_fabrication_input']:.3f})  "
         f"nps_freq {res['nps_mean_freq_input']:.3f}->{res['nps_mean_freq_denoised']:.3f}"
     )
 

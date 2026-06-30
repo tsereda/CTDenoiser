@@ -1,0 +1,84 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Fabrication / hallucination experiment for the generative denoiser (SSFlow).
+#
+# The benchmark's task-based eval (sweep.yml / sweep_ssflow.yml) measures
+# detectability *erosion* — does a present lesion survive denoising? This sweep
+# targets the symmetric, generative-specific failure the paper's related work
+# sets up (Bhadra 2021, Tivnan 2024): does the model *fabricate* lesion-scale
+# structure where the truth has none? It is answered by the new
+# `det/d_prime_fabrication` metric (ctdenoiser.detectability), a CHO d'
+# discriminating the denoiser's signal-absent output from the clean ground truth
+# in the lesion-scale Laguerre-Gauss subspace; `det/d_prime_fabrication_input`
+# is the ~0 noise floor for reference.
+#
+# Why SSFlow and why sweep the step count: SSFlow's one-step inference is the
+# posterior-mean (MMSE) estimator, while multi-step Euler integration is the
+# *generative* mode that the perception--distortion tradeoff predicts will trade
+# fidelity for invented texture. The existing ablation shows multi-step erodes
+# PSNR; this sweep asks the complementary question — does it also fabricate? The
+# headline result we expect: fabrication d' rises with the number of inference
+# steps while one-step stays at the noise floor.
+#
+# Axes (grid = 3 exclude-radius x 4 step-counts x 3 seeds = 36 runs).
+parameters:
+  model:
+    value: ssflow
+  training-mode:
+    value: ssflow
+
+  epochs:
+    value: 50
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # Noisy-pair construction: non-local self-similar patches (correlated-noise-aware),
+  # pinned to the configuration validated in sweep_ssflow.yml.
+  ssflow-pairing:
+    value: similarity
+  ssflow-search-radius:
+    value: 4
+  ssflow-patch-radius:
+    value: 1
+  ssflow-num-similar:
+    value: 1
+  ssflow-exclude-radius:
+    values:
+      - 1
+      - 2
+      - 3
+
+  # --- the fabrication axis: inference steps (one-step MMSE -> multi-step generative) ---
+  # flow-steps is the model default; flow-steps-eval is what the logged metrics
+  # (including det/d_prime_fabrication) use. 1 = posterior mean; >1 = increasingly
+  # generative Euler integration.
+  flow-steps:
+    value: 1
+  flow-steps-eval:
+    values:
+      - 1
+      - 4
+      - 8
+      - 20
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability incl. the fabrication / hallucination index. More
+  # slices than the default keep the CHO covariance (and hence d') stable, which
+  # matters because the fabrication signal is smaller than the lesion signal.
+  - --eval-detectability
+  - --detectability-max-slices=300
