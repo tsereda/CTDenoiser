@@ -186,15 +186,28 @@ class SelfSupervisedFlow(nn.Module):
         t = torch.full((n,), t_scalar, device=z.device, dtype=z.dtype)
         return self.net(z, self.time_emb(t))
 
-    def ss_flow_loss(self, noisy):
-        """Flow-matching loss on self-supervised endpoints. ``noisy``: [B,1,H,W]."""
-        x0, x1 = self._build_pair(noisy)
+    def flow_loss_to_target(self, x0, x1):
+        """Unconditional flow-matching loss between explicit endpoints ``x0 -> x1``.
+
+        Used when an *external* self-supervised scheme supplies the paired view
+        (e.g. a Noise2Sim similarity target or a Noise2Void neighbour-resampled
+        look) instead of the built-in :meth:`_build_pair`. The velocity network
+        is unconditional -- it sees only the interpolant ``z_t``, never ``x0`` --
+        so it cannot solve ``x1`` from the conditioning and reproduce the
+        target's noise; the minimiser is the Noise2Noise posterior mean (see the
+        module docstring). ``x0``/``x1`` are ``[B, 1, H, W]``.
+        """
         n = x0.size(0)
         t = torch.rand(n, 1, 1, 1, device=x0.device, dtype=x0.dtype)
         z_t = (1 - t) * x0 + t * x1
         v_target = x1 - x0  # constant rectified-flow velocity
         v_pred = self.net(z_t, self.time_emb(t.view(n)))
         return F.mse_loss(v_pred, v_target)
+
+    def ss_flow_loss(self, noisy):
+        """Flow-matching loss on self-supervised endpoints. ``noisy``: [B,1,H,W]."""
+        x0, x1 = self._build_pair(noisy)
+        return self.flow_loss_to_target(x0, x1)
 
     @torch.no_grad()
     def forward(self, x):

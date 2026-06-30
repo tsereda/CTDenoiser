@@ -9,8 +9,11 @@ project: ctdenoiser-sweep
 # exact CLI flags argparse expects (e.g. --training-mode, --n2v-mask-fraction).
 #
 # Some combinations in this grid are special-cased by train.py:
-#   * flowmatching + n2v/n2sim -> rejected (flow matching needs paired clean
-#                            targets); those runs fail fast and can be ignored.
+#   * flowmatching + n2v/n2sim -> trains the *unconditional* self-supervised flow
+#                            (ctdenoiser.models.ssflow) with the mode's target as
+#                            the flow endpoint; the conditional flow would reproduce
+#                            the target's noise, so the unconditional net is the
+#                            correct self-supervised counterpart.
 #   * zsn2n / f2n (any model) -> train a fresh per-image net and ignore --model,
 #                            so the 5 runs per per-image mode are equivalent.
 parameters:
@@ -98,10 +101,12 @@ command:
   # at the end of each run -> logged as det/* (+ det/c{hu}/* contrast-detail
   # curve) alongside PSNR/SSIM. Appended in `command` (not `parameters`) because
   # it is a store_true flag and W&B's ${args} macro would emit
-  # `--eval-detectability=True`, which argparse rejects. No-op for the per-image
-  # zsn2n/f2n runs (they print a skip and continue).
+  # `--eval-detectability=True`, which argparse rejects.
   - --eval-detectability
   # The CHO re-denoises present/absent ROIs per contrast, so cap the slice count
   # to keep the end-of-run eval bounded (200 slices x 6 sites is ample for a
   # stable d'); drop the flag to use the full val set.
   - --detectability-max-slices=200
+  # Per-image modes (zsn2n/f2n) re-train a fresh net for every ROI denoise, so
+  # they use a much smaller detectability budget to stay in the minutes range.
+  - --detectability-periimage-max-slices=25
