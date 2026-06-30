@@ -1,0 +1,74 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Per-image (test-time, data-free) denoising baselines for the benchmark table.
+#
+# zsn2n (Zero-Shot Noise2Noise) and f2n (Filter2Noise) train a *fresh* network
+# per image at eval time and ignore --model entirely, so sweeping them across the
+# architectures (as in sweep.yml) would produce byte-identical reruns. They are
+# split out here and swept only over their two axes that matter -- the method and
+# the seed -- giving the architecture-agnostic rows of the method table.
+#
+# Grid = 2 modes x 3 seeds = 6 runs. --model is pinned to a single value purely
+# to satisfy argparse; it has no effect on these per-image methods.
+parameters:
+  model:
+    value: redcnn   # ignored by zsn2n/f2n; pinned only to satisfy the CLI
+
+  training-mode:
+    values:
+      - zsn2n        # Zero-Shot Noise2Noise per-image test-time training
+      - f2n          # Filter2Noise per-image attention-guided bilateral filtering
+
+  epochs:
+    value: 50        # ignored by per-image modes (no shared training loop)
+
+  # Multiple seeds for significance: the per-image RNG seed controls both the
+  # net init and the patient val split, so these are 3 genuinely distinct runs
+  # (unlike replicating across --model, which changes nothing here).
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # Zero-Shot Noise2Noise per-image optimisation
+  zsn2n-iters:
+    value: 2000
+  zsn2n-channels:
+    value: 48
+  zsn2n-lr:
+    value: 0.001
+
+  # Filter2Noise per-image attention-guided bilateral filtering
+  f2n-iters:
+    value: 1500
+  f2n-layers:
+    value: 2
+  f2n-radius:
+    value: 3
+  f2n-channels:
+    value: 16
+  f2n-lr:
+    value: 0.001
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability (CHO d' + corrected NPS + fabrication index), same
+  # as the main sweep so the per-image rows share the det/* columns. store_true
+  # flag -> appended here, not in `parameters`.
+  - --eval-detectability
+  # Each ROI denoise here re-trains a net from scratch (~4 per slice), so the
+  # per-image detectability eval uses a much smaller slice budget than the
+  # networks (which keep --detectability-max-slices=200) to stay in the minutes
+  # range on top of an already long per-image run.
+  - --detectability-periimage-max-slices=25
