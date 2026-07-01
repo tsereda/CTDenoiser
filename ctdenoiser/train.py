@@ -122,6 +122,28 @@ def dataset_provenance(train_loader, val_loader, full_slice):
     return info
 
 
+def _train_loader(ds, args):
+    """A shuffled training DataLoader tuned to keep the GPU fed.
+
+    The training step on a batch of small patches is tiny relative to an A100's
+    throughput, so the run is input-bound: if the loader stalls, the GPU idles
+    (the low-GPU-util / high-CPU sweep symptom). ``persistent_workers`` avoids
+    respawning the worker pool every epoch (50 epochs x N patients), and
+    ``prefetch_factor`` keeps several batches staged ahead of the GPU. Both are
+    only valid with ``num_workers > 0``.
+    """
+    kwargs = dict(
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
+    if args.num_workers > 0:
+        kwargs["persistent_workers"] = True
+        kwargs["prefetch_factor"] = args.prefetch_factor
+    return DataLoader(ds, **kwargs)
+
+
 def build_loaders(args):
     """Return (train_loader, val_loader, full_slice_eval)."""
     if getattr(args, "h5_path", None):
@@ -148,10 +170,7 @@ def build_loaders(args):
         val_ds = HDF5CTDataset(
             args.h5_path, val_p, patch_size=args.patch_size, train=False
         )
-        train_loader = DataLoader(
-            train_ds, batch_size=args.batch_size, shuffle=True,
-            num_workers=args.num_workers, pin_memory=True,
-        )
+        train_loader = _train_loader(train_ds, args)
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
         return train_loader, val_loader, True
 
@@ -171,10 +190,7 @@ def build_loaders(args):
             args.dicom_root, val_p, patch_size=args.patch_size, train=False,
             hu_offset=args.hu_offset, hu_scale=args.hu_scale,
         )
-        train_loader = DataLoader(
-            train_ds, batch_size=args.batch_size, shuffle=True,
-            num_workers=args.num_workers, pin_memory=True,
-        )
+        train_loader = _train_loader(train_ds, args)
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
         return train_loader, val_loader, True
 
@@ -182,10 +198,7 @@ def build_loaders(args):
     ds = SyntheticCTDataset(
         length=args.synthetic_len, patch_size=args.patch_size
     )
-    loader = DataLoader(
-        ds, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.num_workers,
-    )
+    loader = _train_loader(ds, args)
     return loader, loader, False
 
 
@@ -493,7 +506,11 @@ def main(argv=None):
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=32,
+                        help="training batch size. The default is sized to keep "
+                             "a data-centre GPU busy: a 4x64x64 batch (the old "
+                             "default) under-fills an A100 and the run idles the "
+                             "GPU waiting on the loader.")
     parser.add_argument("--patch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--flow-steps", type=int, default=20,
@@ -501,7 +518,13 @@ def main(argv=None):
     parser.add_argument("--flow-steps-eval", type=int, default=5,
                         help="Euler ODE steps during training-time validation (faster; "
                              "use --flow-steps for final quality eval)")
-    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=8,
+                        help="DataLoader worker processes feeding the GPU. Too "
+                             "few starves the GPU (low-util symptom); match the "
+                             "pod's CPU allocation.")
+    parser.add_argument("--prefetch-factor", type=int, default=4,
+                        help="batches each worker stages ahead of the GPU "
+                             "(DataLoader prefetch_factor; num-workers > 0 only)")
     parser.add_argument("--synthetic-len", type=int, default=64)
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints")
     parser.add_argument("--device", type=str, default=None)

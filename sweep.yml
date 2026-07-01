@@ -42,6 +42,26 @@ parameters:
   epochs:
     value: 50
 
+  # --- GPU utilisation / throughput ---------------------------------------
+  # A 4x64x64 batch (the historical train.py default) under-fills an A100: the
+  # per-step launch/sync overhead dwarfs the tiny compute, so the GPU idles
+  # ~65% of the time (the "GPU util 31-38%, CPU >100%" sweep violation). Feeding
+  # it a larger batch and keeping several batches prefetched pushes utilisation
+  # well past the >40% floor. Set here (not left to defaults) so the resource
+  # profile of the sweep is explicit and reproducible.
+  #
+  # Note: batch-size is 8x the old default, so with the same --lr/--epochs each
+  # run takes ~8x fewer optimiser steps; scale --lr up (roughly linearly) if a
+  # model underfits relative to the old bs=4 runs.
+  batch-size:
+    value: 32
+  # Worker processes staging patches ahead of the GPU. Kept below the pod's CPU
+  # limit (8) so the main training process is not starved.
+  num-workers:
+    value: 6
+  prefetch-factor:
+    value: 4
+
   # Multiple seeds for significance: single-seed tables are an automatic reject,
   # and the self-supervised leads (e.g. Noise2Sim vs N2V) need >=3 seeds + a
   # per-patient std to survive review. Triples the grid; cut to [0, 1] if GPU is
