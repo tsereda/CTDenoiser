@@ -22,6 +22,7 @@ def _args(tmp_path, mode):
         "--synthetic-len", "8",
         "--batch-size", "4",
         "--patch-size", "32",
+        "--num-workers", "0",
         "--device", "cpu",
         "--checkpoint-dir", str(tmp_path),
     ]
