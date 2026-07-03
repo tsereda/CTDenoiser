@@ -4,27 +4,25 @@ method: grid
 entity: timgsereda
 project: ctdenoiser-sweep
 
-# Fabrication / hallucination experiment for the generative denoiser (SSFlow).
+# SSFlow inference-steps sweep: fabrication (hallucination) AND the quality/
+# detectability one-vs-multi-step ablation, from a single set of trained models.
 #
-# The benchmark's task-based eval (sweep.yml / sweep_ssflow.yml) measures
-# detectability *erosion* — does a present lesion survive denoising? This sweep
-# targets the symmetric, generative-specific failure the paper's related work
-# sets up (Bhadra 2021, Tivnan 2024): does the model *fabricate* lesion-scale
-# structure where the truth has none? It is answered by the new
-# `det/d_prime_fabrication` metric (ctdenoiser.detectability), a CHO d'
-# discriminating the denoiser's signal-absent output from the clean ground truth
-# in the lesion-scale Laguerre-Gauss subspace; `det/d_prime_fabrication_input`
-# is the ~0 noise floor for reference.
+# Key efficiency point: --flow-steps-eval only changes *inference*, never the
+# trained weights, so sweeping it as a grid axis re-trains the same model once
+# per step count (the old 3x4x3=36 form trained 9 distinct models 4x each). This
+# sweep instead trains each (exclude-radius, seed) model ONCE and re-evaluates
+# that checkpoint at every step count via --eval-steps-sweep, logging
+# val/steps{k}/* (quality) and det/steps{k}/* (detectability incl. the
+# fabrication index). One run yields the whole within-model curve.
 #
-# Why SSFlow and why sweep the step count: SSFlow's one-step inference is the
-# posterior-mean (MMSE) estimator, while multi-step Euler integration is the
-# *generative* mode that the perception--distortion tradeoff predicts will trade
-# fidelity for invented texture. The existing ablation shows multi-step erodes
-# PSNR; this sweep asks the complementary question — does it also fabricate? The
-# headline result we expect: fabrication d' rises with the number of inference
-# steps while one-step stays at the noise floor.
+#   * Fabrication result: det/steps{k}/d_prime_fabrication vs k -- the generative-
+#     specific failure (Bhadra 2021, Tivnan 2024). Expected: rises with steps
+#     while one-step stays at the det/steps{k}/d_prime_fabrication_input floor.
+#   * Steps ablation: val/steps{k}/psnr vs k (one-step MMSE vs multi-step Euler),
+#     the same curve the method section's ablation reports -- now confound-free
+#     (identical weights at every k), so it also supersedes sweep_ssflow.yml.
 #
-# Axes (grid = 3 exclude-radius x 4 step-counts x 3 seeds = 36 runs).
+# Grid = 3 exclude-radius x 3 seeds = 9 runs (down from 36).
 parameters:
   model:
     value: ssflow
@@ -41,7 +39,7 @@ parameters:
       - 2
 
   # Noisy-pair construction: non-local self-similar patches (correlated-noise-aware),
-  # pinned to the configuration validated in sweep_ssflow.yml.
+  # pinned to the configuration validated in the ablation.
   ssflow-pairing:
     value: similarity
   ssflow-search-radius:
@@ -50,24 +48,21 @@ parameters:
     value: 1
   ssflow-num-similar:
     value: 1
+
+  # The correlated-noise knob: candidate matches within this radius are excluded
+  # so the paired noise is decorrelated. r=1 recovers the Noise2Sim target.
   ssflow-exclude-radius:
     values:
       - 1
       - 2
       - 3
 
-  # --- the fabrication axis: inference steps (one-step MMSE -> multi-step generative) ---
-  # flow-steps is the model default; flow-steps-eval is what the logged metrics
-  # (including det/d_prime_fabrication) use. 1 = posterior mean; >1 = increasingly
-  # generative Euler integration.
+  # One-step is the model default and the best-epoch selection metric; the full
+  # step curve is evaluated post-training via --eval-steps-sweep below.
   flow-steps:
     value: 1
   flow-steps-eval:
-    values:
-      - 1
-      - 4
-      - 8
-      - 20
+    value: 1
 
 command:
   - ${env}
@@ -77,8 +72,14 @@ command:
   - ${args}
   - --h5-path=/workspace/data.h5
   - --wandb-project=ctdenoiser-sweep
-  # Task-based detectability incl. the fabrication / hallucination index. More
-  # slices than the default keep the CHO covariance (and hence d') stable, which
-  # matters because the fabrication signal is smaller than the lesion signal.
   - --eval-detectability
+  # More slices than the default keep the CHO covariance (and d') stable; the
+  # fabrication signal is smaller than the lesion signal.
   - --detectability-max-slices=300
+  # Re-evaluate the trained checkpoint at each step count: one-step MMSE ->
+  # multi-step generative Euler. Logs val/steps{k}/* and det/steps{k}/*.
+  - --eval-steps-sweep
+  - "1"
+  - "4"
+  - "8"
+  - "20"

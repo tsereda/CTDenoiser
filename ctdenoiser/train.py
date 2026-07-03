@@ -558,6 +558,15 @@ def main(argv=None):
                              "a full from-scratch optimisation (~4 per slice), so this "
                              "keeps the eval to minutes not hours (0=use "
                              "--detectability-max-slices)")
+    parser.add_argument("--eval-steps-sweep", type=int, nargs="+", default=None,
+                        metavar="K",
+                        help="flow models only: after training, re-evaluate the SAME "
+                             "best checkpoint at each of these inference step counts and "
+                             "log quality as val/steps{k}/* and (with "
+                             "--eval-detectability) detectability as det/steps{k}/*. "
+                             "Gives a within-model quality- and fabrication-vs-steps "
+                             "curve in one run (no separate-training/seed confound), "
+                             "replacing a per-step-count sweep axis.")
     args = parser.parse_args(argv)
 
     if (args.model == "ssflow") != (args.training_mode == "ssflow"):
@@ -835,12 +844,40 @@ def main(argv=None):
             f"{det['nps_mean_freq_denoised']:.3f}"
         )
 
+    # Within-model inference-steps sweep (flow models). One trained checkpoint,
+    # re-evaluated at several ODE step counts: the quality- and fabrication-vs-steps
+    # curves stay free of the checkpoint/seed confound that separate per-step-count
+    # runs carry, and one run replaces a whole sweep axis. num_steps drives both the
+    # quality forward (via eval_steps) and the detectability denoiser.
+    steps_curve = {}
+    if args.eval_steps_sweep and hasattr(model, "num_steps"):
+        model.load_state_dict(save_state)
+        _orig_steps = model.num_steps
+        for k in args.eval_steps_sweep:
+            model.num_steps = k
+            q = evaluate(model, val_loader, device, full_slice,
+                         args.patch_size, eval_steps=k)
+            steps_curve.update({f"val/steps{k}/{m}": v for m, v in q.items()})
+            if args.eval_detectability:
+                d = detectability_eval(model, val_loader, device, full_slice, args)
+                steps_curve.update({f"det/steps{k}/{m}": v for m, v in d.items()})
+                print(
+                    f"  steps={k:2d}  psnr={q['psnr']:.3f}  "
+                    f"preserved={d['detectability_preserved']:.3f}  "
+                    f"fabrication d'={d['d_prime_fabrication']:.3f}"
+                )
+            else:
+                print(f"  steps={k:2d}  psnr={q['psnr']:.3f}")
+        model.num_steps = _orig_steps
+
     if _wb:
         # Headline summary: how far the best epoch beats the do-nothing floor.
         _wb.summary["val/psnr_gain"] = metrics["psnr"] - baseline["psnr"]
         _wb.summary["val/ssim_gain"] = metrics["ssim"] - baseline["ssim"]
         if det is not None:
             _wb.log({f"det/{k}": v for k, v in det.items()})
+        if steps_curve:
+            _wb.log(steps_curve)
         _wb.finish()
 
     ckpt_dir = Path(args.checkpoint_dir)
