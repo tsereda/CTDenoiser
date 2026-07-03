@@ -6,6 +6,13 @@ project: ctdenoiser-sweep
 
 # Ablation for the self-supervised rectified flow (ssflow).
 #
+# SUPERSEDED by sweep_hallucination.yml. Because --flow-steps-eval changes only
+# inference (never the trained weights), that sweep trains each (exclude-radius,
+# seed) model once and evaluates the quality-vs-steps curve (val/steps{k}/*) from
+# the same checkpoint via --eval-steps-sweep -- confound-free and covering steps
+# {1,4,8,20}, a superset of the {1,4} here. You do NOT need to run this file; it
+# is kept only for the original separate-training-per-step methodology.
+#
 # This is a *dedicated* sweep rather than part of sweep.yml: --model ssflow and
 # --training-mode ssflow must be used together (the flow has its own velocity
 # network and loss), so they are pinned here and only the two ablation axes vary.

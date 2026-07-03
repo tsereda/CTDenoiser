@@ -34,6 +34,22 @@ def test_flowmatching_selfsup_runs_end_to_end(tmp_path, mode):
     assert (tmp_path / "flowmatching.pt").exists()
 
 
+def test_eval_steps_sweep_evaluates_each_step_count(tmp_path, capsys):
+    # --eval-steps-sweep re-evaluates the one trained checkpoint at each step
+    # count. Without W&B there is no per-epoch eval, so this also exercises the
+    # final-model fallback path; we assert the per-step curve was computed.
+    main([
+        "--model", "ssflow", "--training-mode", "ssflow",
+        "--epochs", "1", "--synthetic-len", "8", "--batch-size", "4",
+        "--patch-size", "32", "--device", "cpu",
+        "--checkpoint-dir", str(tmp_path),
+        "--eval-steps-sweep", "1", "4", "8",
+    ])
+    out = capsys.readouterr().out
+    for k in (1, 4, 8):
+        assert f"steps={k:2d}" in out, f"missing steps={k} in the eval-steps sweep"
+
+
 def test_unconditional_flow_has_no_noisy_conditioning():
     # The conditional flow takes a 2-channel (x_t, cond) input; the unconditional
     # self-supervised flow used for n2v/n2sim takes 1 channel (no noisy
