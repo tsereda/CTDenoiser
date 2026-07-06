@@ -8,6 +8,7 @@ Usage:
     python sweep.py sweep.yml --agents 8  # Sweep abdomen + 8 agents
     python sweep.py sweep.yml --anatomy chest --agents 8   # Sweep /data/ldct_chest.h5
     python sweep.py --deploy SWEEP_ID     # Deploy agents for existing sweep + watch
+    python sweep.py --resume SWEEP_ID --agents 8   # Requeue dead cells + redeploy agents
 
 Each anatomy is downloaded once (data pod -> /data/ldct_<anatomy>.h5) and swept
 separately; merge the exports with scripts/benchmark_report.py for one report.
@@ -61,6 +62,74 @@ def create_sweep(config_path):
     except Exception as e:
         print(f"Error creating sweep: {e}")
         return None
+
+
+# States of a run that mean it never produced a usable result. Deleting these
+# frees their grid cell so the sweep controller re-issues the combination.
+REQUEUE_STATES = {'crashed', 'failed', 'killed'}
+
+
+def requeue_dead_runs(entity, project, sweep_id, include_running=False,
+                      assume_yes=False):
+    """Delete non-finished runs so a grid sweep re-issues their combinations.
+
+    A W&B *grid* sweep enumerates every parameter combination and treats each
+    combination that already has a run as consumed -- even if that run crashed.
+    So after a job dies, fresh agents skip the dead cells (the sweep may even
+    report ``finished`` with holes in the grid) and nothing reruns. Deleting the
+    dead runs is the fix: their combinations become unstarted again and the next
+    agent picks them up from scratch.
+
+    By default only genuinely-dead runs (``crashed``/``failed``/``killed``) are
+    removed. Orphaned runs left by a deleted job can linger as ``running`` until
+    W&B's heartbeat times out; pass ``include_running=True`` to requeue those
+    too -- safe only when no agents are actually alive (e.g. right after the job
+    was deleted), since it will also delete any genuinely-live run.
+
+    Returns True if the requeue completed (or there was nothing to do).
+    """
+    states = set(REQUEUE_STATES)
+    if include_running:
+        states.add('running')
+
+    print(f"\nRequeuing dead runs in {entity}/{project}/{sweep_id}")
+    print(f"  Target states: {', '.join(sorted(states))}")
+
+    try:
+        api = wandb.Api()
+        sweep = api.sweep(f"{entity}/{project}/{sweep_id}")
+    except Exception as e:
+        print(f"  Error: could not load sweep: {e}")
+        return False
+
+    dead = [r for r in sweep.runs if r.state in states]
+    if not dead:
+        print("  No dead runs found -- the grid will resume with any unstarted "
+              "cells.")
+        return True
+
+    counts = {}
+    for r in dead:
+        counts[r.state] = counts.get(r.state, 0) + 1
+    print(f"  Found {len(dead)} run(s) to delete and requeue:")
+    for st, n in sorted(counts.items()):
+        print(f"    {st}: {n}")
+
+    if not assume_yes:
+        confirm = input(f"\n  Delete these {len(dead)} run(s)? [y/N]: ").lower().strip()
+        if confirm != 'y':
+            print("  Requeue cancelled -- agents will only pick up unstarted cells.")
+            return False
+
+    deleted = 0
+    for r in dead:
+        try:
+            r.delete()
+            deleted += 1
+        except Exception as e:
+            print(f"    Warning: failed to delete {r.id} ({r.name}): {e}")
+    print(f"  Requeued {deleted}/{len(dead)} combination(s).")
+    return True
 
 
 # ============================================================================
@@ -346,6 +415,10 @@ Examples:
   python sweep.py sweep.yml --anatomy chest     # Sweep /data/ldct_chest.h5
   python sweep.py sweep.yml --h5-name ldct_preprocessed.h5   # legacy cache
   python sweep.py --deploy dnffyu6j             # Deploy agents for existing sweep + watch
+  python sweep.py --resume 55if6jcw --agents 7  # Requeue crashed cells + redeploy 7 agents
+  python sweep.py --resume 55if6jcw --agents 7 --include-running --yes
+                                                # Non-interactive resume after a job delete
+                                                # (orphaned "running" runs also requeued)
 
   python sweep.py --delete                      # Delete all sweep jobs
         """
@@ -364,6 +437,17 @@ Examples:
                              '(e.g. ldct_preprocessed.h5 for a legacy cache)')
     parser.add_argument('--deploy', type=str, metavar='SWEEP_ID',
                         help='Deploy agents for existing sweep ID')
+    parser.add_argument('--resume', type=str, metavar='SWEEP_ID',
+                        help='Resume an existing grid sweep: requeue its '
+                             'crashed/failed/killed runs (so the controller '
+                             're-issues those cells) then deploy fresh agents')
+    parser.add_argument('--include-running', action='store_true',
+                        help='With --resume, also requeue runs still marked '
+                             '"running" (orphans from a deleted job). Only safe '
+                             'when no agents are actually alive.')
+    parser.add_argument('--yes', action='store_true',
+                        help='Skip the confirmation prompt when requeuing runs '
+                             '(for non-interactive resume)')
     parser.add_argument('--delete', action='store_true',
                         help='Delete all wandb sweep jobs')
 
@@ -373,11 +457,20 @@ Examples:
         delete_jobs()
         sys.exit(0)
 
-    if not args.sweep_file and not args.deploy:
+    if not args.sweep_file and not args.deploy and not args.resume:
         parser.print_help()
         sys.exit(0)
 
-    if args.deploy:
+    if args.resume:
+        sweep_id = args.resume
+        print(f"\nResuming existing sweep: {sweep_id}")
+        config = load_sweep_config(os.path.join(SCRIPT_DIR, 'sweep.yml'))
+        entity = config.get('entity', DEFAULT_ENTITY)
+        project = config.get('project', DEFAULT_PROJECT)
+        requeue_dead_runs(entity, project, sweep_id,
+                          include_running=args.include_running,
+                          assume_yes=args.yes)
+    elif args.deploy:
         sweep_id = args.deploy
         print(f"\nUsing existing sweep: {sweep_id}")
         config = load_sweep_config(os.path.join(SCRIPT_DIR, 'sweep.yml'))
