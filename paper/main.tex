@@ -72,7 +72,7 @@ $+0.04$\,dB), so the decorrelated pairing is what closes the gap.  Finally, a
 task-based evaluation with
 a channelized Hotelling observer over a three-seed patient cohort shows these
 fidelity gains do not translate into detectability: the same models that gain
-$\sim$4\,dB PSNR \emph{erode} lesion detectability by $6$--$9\%$ ($d'$ at
+$\sim$4\,dB PSNR \emph{erode} lesion detectability by $7$--$8\%$ ($d'$ at
 $160$\,HU) rather than improving it---without fabricating structure---and the
 strongest PSNR performers shift the noise-power spectrum most toward low
 frequency, changes PSNR and SSIM do not register.  All code, model
@@ -553,8 +553,10 @@ slices per run), extract present/absent ROIs at the \emph{input}, \emph{denoised
 and \emph{clean} stages, channelise with ten Laguerre-Gauss channels, and compute
 the detectability index $d'$.  The observer is validated against the closed-form
 white-noise value $d' = \lVert s\rVert / \sigma$ as a unit test before use.  We
-run it on the three-seed cross-validation models of Table~\ref{tab:cv} (all four
-trainable architectures) and report the mean over architectures and seeds.  The
+run it on the completed three-seed benchmark models of
+Table~\ref{tab:sweep-benchmark} (the three CNN architectures; CTformer
+detectability is still landing) and report the mean over architectures and
+seeds.  The
 per-image methods (ZS-N2N, Filter2Noise) are omitted---each CHO realisation would
 retrain their per-image network thousands of times---and the generative
 SSFlow/CFM detectability, which can \emph{fabricate} as well as erode, is reported
@@ -563,35 +565,38 @@ separately.
 \begin{table*}[t]
   \centering
   \small
-  \caption{Task-based detectability on the three-seed cross-validation models
-           (Table~\ref{tab:cv}); mean over $4$ architectures $\times$ $3$ seeds.
-           \emph{Top:} CHO detectability index $d'$ for the noisy input (floor)
-           and clean reference (ceiling) at three lesion contrasts; these are
-           method-independent and carry a large between-split (patient-cohort)
-           s.d.\ ($\pm1.6$ at $160$\,HU), which is why we report the ratio below.
-           \emph{Bottom:} detectability \emph{preserved},
-           $d'_\text{denoised}/d'_\text{input}$ (mean\,$\pm$\,s.d.; $1.0=$
-           unchanged, $<1=$ eroded), and the denoised noise-power-spectrum radial
-           centroid (input $0.112$; lower $=$ more low-frequency ``waxy''
-           texture).  Architecture differences are within s.d., so rows are
-           aggregated by supervision regime.  $d'_\text{denoised}$ is below
-           $d'_\text{input}$ in all $36$ runs and never exceeds the clean
-           ceiling.}
+  \caption{Task-based detectability on the completed benchmark models
+           (Table~\ref{tab:sweep-benchmark}); mean over $3$ CNN architectures
+           $\times$ $3$ seeds ($27$ runs; CTformer detectability is still
+           landing).  \emph{Top:} CHO detectability index $d'$ for the noisy
+           input (floor) and clean reference (ceiling) at three lesion
+           contrasts; these are method-independent and carry a large
+           between-split (patient-cohort) s.d.\ ($\pm1.3$ at $160$\,HU), which is
+           why we report the ratio below.  \emph{Bottom:} detectability
+           \emph{preserved}, $d'_\text{denoised}/d'_\text{input}$
+           (mean\,$\pm$\,s.d.; $1.0=$ unchanged, $<1=$ eroded); the denoised
+           noise-power-spectrum radial centroid (input $0.112$; lower $=$ more
+           low-frequency ``waxy'' texture); and the \emph{fabrication} $d'$ from
+           a CHO run on \emph{signal-absent} ROIs (input floor $0.028$; $>$floor
+           $=$ invented structure).  Architecture differences are within s.d.,
+           so rows are aggregated by supervision regime.  $d'_\text{denoised}$ is
+           below $d'_\text{input}$ in all $27$ runs and never exceeds the clean
+           ceiling, while fabrication $d'$ never rises above the floor.}
   \label{tab:detect}
-  \begin{tabular}{lcccc}
+  \begin{tabular}{lccccc}
     \toprule
-     & \multicolumn{3}{c}{lesion contrast (HU)} & NPS \\
+     & \multicolumn{3}{c}{lesion contrast (HU)} & NPS & fab. \\
     \cmidrule(lr){2-4}
-     & $40$ & $80$ & $160$ & centroid\,$\downarrow$ \\
+     & $40$ & $80$ & $160$ & centroid\,$\downarrow$ & $d'\,\downarrow$ \\
     \midrule
-    \multicolumn{5}{l}{\emph{Reference $d'$ (method-independent)}} \\
-    \quad input (floor)   & $1.51$ & $3.03$ & $6.06$ & $0.112$ \\
-    \quad clean (ceiling) & $1.54$ & $3.09$ & $6.18$ & --- \\
+    \multicolumn{6}{l}{\emph{Reference $d'$ (method-independent)}} \\
+    \quad input (floor)   & $1.51$ & $3.03$ & $6.06$ & $0.112$ & $0.028$ \\
+    \quad clean (ceiling) & $1.54$ & $3.09$ & $6.18$ & --- & --- \\
     \midrule
-    \multicolumn{5}{l}{\emph{Detectability preserved $d'_\text{den}/d'_\text{in}$}} \\
-    \quad Supervised & $1.023\,{\pm}\,0.007$ & $1.013\,{\pm}\,0.009$ & $0.929\,{\pm}\,0.035$ & $0.088\,{\pm}\,0.004$ \\
-    \quad Noise2Sim  & $1.007\,{\pm}\,0.006$ & $0.995\,{\pm}\,0.007$ & $0.918\,{\pm}\,0.029$ & $0.101\,{\pm}\,0.005$ \\
-    \quad Noise2Void & $1.003\,{\pm}\,0.007$ & $0.994\,{\pm}\,0.008$ & $0.921\,{\pm}\,0.026$ & $0.110\,{\pm}\,0.007$ \\
+    \multicolumn{6}{l}{\emph{Detectability preserved $d'_\text{den}/d'_\text{in}$}} \\
+    \quad Supervised & $1.024\,{\pm}\,0.008$ & $1.016\,{\pm}\,0.007$ & $0.934\,{\pm}\,0.033$ & $0.087\,{\pm}\,0.004$ & $0.022\,{\pm}\,0.003$ \\
+    \quad Noise2Sim  & $1.008\,{\pm}\,0.006$ & $0.995\,{\pm}\,0.006$ & $0.919\,{\pm}\,0.030$ & $0.100\,{\pm}\,0.005$ & $0.028\,{\pm}\,0.006$ \\
+    \quad Noise2Void & $1.003\,{\pm}\,0.006$ & $0.993\,{\pm}\,0.007$ & $0.919\,{\pm}\,0.030$ & $0.109\,{\pm}\,0.006$ & $0.033\,{\pm}\,0.006$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -600,30 +605,32 @@ Table~\ref{tab:detect} shows four things.  \textbf{First}, the detectability
 \emph{headroom} is small: the clean reference exceeds the noisy input by only
 $\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
 lesions are nearly as detectable in the noisy image as in the noise-free one.
-\textbf{Second}, although these same models gain $4.0$--$4.2$\,dB PSNR
-(supervised) and $1.4$--$1.7$\,dB (Noise2Sim) over the input
-(Table~\ref{tab:cv}), none improves detectability at the supra-threshold
-operating point: $d'_\text{denoised} < d'_\text{input}$ in all $36$ runs---a
-$6$--$9\%$ loss at $160$\,HU---and none exceeds the clean ceiling, so the
-deterministic denoisers \emph{erode} detectability without \emph{fabricating}
-it.  The erosion is contrast-dependent: near the detection threshold
-($40$\,HU) detectability is preserved to within $1$--$2\%$, so the loss
-concentrates precisely at the high-contrast operating point where PSNR and SSIM
-report their largest, most confident gains.  \textbf{Third}, the supervised
-models that win most on PSNR also shift the noise-power-spectrum centroid
-furthest toward low frequency ($0.112 \!\to\! 0.088$, a $21\%$ drop, vs.\
-$0.112 \!\to\! 0.110$ for Noise2Void), the blotchy / ``waxy'' texture
-radiologists distrust.  \textbf{Fourth}, the differences \emph{between}
-supervision regimes are not statistically resolved at this sample size: the
-preserved-detectability ratios at $160$\,HU ($0.929\,{\pm}\,0.035$ supervised,
-$0.918\,{\pm}\,0.029$ Noise2Sim, $0.921\,{\pm}\,0.026$ Noise2Void) overlap
-well within one standard deviation, so the data support the \emph{erosion}
-claim---every regime sits below $1.0$---but not a fine-grained regime-vs-regime
-detectability ranking; only the NPS-centroid shift cleanly separates supervised
-from blind-spot training.  Reporting the \emph{preserved} ratio
+\textbf{Second}, although these same models gain $4.0$--$4.3$\,dB PSNR
+(supervised) and $1.7$--$1.8$\,dB (Noise2Sim) over the input
+(Table~\ref{tab:sweep-benchmark}), none improves detectability at the
+supra-threshold operating point: $d'_\text{denoised} < d'_\text{input}$ in all
+$27$ runs---a $7$--$8\%$ loss at $160$\,HU---and none exceeds the clean ceiling,
+while the fabrication $d'$ on signal-absent ROIs stays at its floor
+($0.022$--$0.033$ vs.\ the $0.028$ input floor), so the deterministic denoisers
+\emph{erode} detectability without \emph{fabricating} it.  The erosion is
+contrast-dependent: near the detection threshold ($40$\,HU) detectability is
+preserved to within $1$--$2\%$, so the loss concentrates precisely at the
+high-contrast operating point where PSNR and SSIM report their largest, most
+confident gains.  \textbf{Third}, the supervised models that win most on PSNR
+also shift the noise-power-spectrum centroid furthest toward low frequency
+($0.112 \!\to\! 0.087$, a $22\%$ drop, vs.\ $0.112 \!\to\! 0.109$ for
+Noise2Void), the blotchy / ``waxy'' texture radiologists distrust.
+\textbf{Fourth}, the differences \emph{between} supervision regimes are not
+statistically resolved at this sample size: the preserved-detectability ratios
+at $160$\,HU ($0.934\,{\pm}\,0.033$ supervised, $0.919\,{\pm}\,0.030$
+Noise2Sim, $0.919\,{\pm}\,0.030$ Noise2Void) overlap well within one standard
+deviation, so the data support the \emph{erosion} claim---every regime sits
+below $1.0$---but not a fine-grained regime-vs-regime detectability ranking;
+only the NPS-centroid shift cleanly separates supervised from blind-spot
+training.  Reporting the \emph{preserved} ratio
 $d'_\text{denoised}/d'_\text{input}$ rather than the raw index matters here: it
-cancels the large between-split variation in absolute $d'$ (s.d.\ $\pm1.57$ at
-$160$\,HU) and is stable across seeds ($\pm0.007$--$0.035$), isolating the
+cancels the large between-split variation in absolute $d'$ (s.d.\ $\pm1.31$ at
+$160$\,HU) and is stable across seeds ($\pm0.003$--$0.033$), isolating the
 denoiser's effect.  None of this contrast-dependent erosion or texture shift
 appears in PSNR or SSIM, which rise monotonically; task-based $d'$ is therefore
 a necessary complement to them, not an optional one.
