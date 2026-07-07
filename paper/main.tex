@@ -791,10 +791,14 @@ columns fixed, cells (``---'') populated as those sweeps finish.
   \caption{\textbf{Main benchmark sweep} (\texttt{sweep.yml}): architecture
            $\times$ supervision grid ($5$ models $\times$ $3$ modes $\times$ $3$
            seeds; CFM is paired-target only, so it has no self-supervised
-           variant).  \emph{Scaffold}---rows and columns fixed; data cells
-           (``---'') are populated as the grid completes.  Per-image methods are
-           in Table~\ref{tab:sweep-periimage}.  PSNR shows the gain over the
-           LDCT input floor.  $\uparrow$/$\downarrow$: higher/lower is better.}
+           variant).  The three CNN backbones (RED-CNN, U-Net, DnCNN) are
+           complete over $3$ seeds and reported as mean\,$\pm$\,s.d.; the
+           CTformer runs are still training and CFM is pending (``---'').  The
+           PSNR column gives the absolute value with the gain over the LDCT
+           input floor in parentheses.  Per-image methods are in
+           Table~\ref{tab:sweep-periimage}.  \textbf{Bold}: best $\Delta$PSNR
+           per supervision block.  $\uparrow$/$\downarrow$: higher/lower is
+           better.}
   \label{tab:sweep-benchmark}
   \begin{tabular}{llrccccc}
     \toprule
@@ -802,23 +806,23 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
     GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
     \midrule
-    LDCT input & --- (no denoising) & --- & --- & --- & --- & --- & --- \\
+    LDCT input & --- (no denoising) & --- & $30.25$ & $0.876$ & $0.0320$ & $0.174$ & $0.0115$ \\
     \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    U-Net                            & Supervised & $1.95\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & --- & --- & --- & --- & --- \\
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{34.50 \,($+4.25{\pm}0.23$)} & $0.927{\pm}0.013$ & $0.0194$ & $0.167$ & $0.0041$ \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 34.26 \,($+4.02{\pm}0.22$) & $0.925{\pm}0.014$ & $0.0199$ & $0.188$ & $0.0044$ \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 34.23 \,($+3.99{\pm}0.18$) & $0.924{\pm}0.014$ & $0.0200$ & $0.198$ & $0.0044$ \\
+    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
     CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & --- & --- & --- & --- & --- \\
     \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & --- & --- & --- & --- & --- \\
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 32.05 \,($+1.81{\pm}0.10$) & $0.901{\pm}0.015$ & $0.0259$ & $0.163$ & $0.0075$ \\
+    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & \textbf{32.08 \,($+1.83{\pm}0.08$)} & $0.901{\pm}0.015$ & $0.0259$ & $0.174$ & $0.0075$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 31.93 \,($+1.69{\pm}0.09$) & $0.898{\pm}0.015$ & $0.0263$ & $0.187$ & $0.0078$ \\
+    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
     \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & --- & --- & --- & --- & --- \\
-    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & --- & --- & --- & --- & --- \\
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{30.67 \,($+0.42{\pm}0.06$)} & $0.883{\pm}0.018$ & $0.0303$ & $0.177$ & $0.0103$ \\
+    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 30.54 \,($+0.29{\pm}0.04$) & $0.883{\pm}0.018$ & $0.0307$ & $0.198$ & $0.0104$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 30.19 \,($-0.06{\pm}0.03$) & $0.875{\pm}0.018$ & $0.0321$ & $0.224$ & $0.0116$ \\
+    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
     \bottomrule
   \end{tabular}
 \end{table*}
