@@ -36,48 +36,31 @@
 
 % -----------------------------------------------------------------------
 \begin{abstract}
-Low-dose computed tomography (LDCT) denoising is clinically important:
-reducing X-ray exposure introduces structured, spatially correlated noise
-that degrades diagnostic quality and that ordinary blind-spot
-self-supervision is not designed to handle.  We present \textbf{CTDenoiser},
-an open benchmark and unified data, training, and inference harness that evaluates
-five architectures---RED-CNN, DnCNN, U-Net, CTformer, and a Conditional
-Flow Matching (CFM) model that frames denoising as an ODE transport from the
-noisy to the clean distribution---across the supervision regimes for which
-they are defined: fully \emph{supervised} training with paired full-dose
-targets, \emph{Noise2Sim} similarity-based self-supervision, \emph{Noise2Void}
-blind-spot self-supervision, \emph{Zero-Shot Noise2Noise} (ZS-N2N) per-image
-optimisation, and \emph{Filter2Noise}.  Beyond PSNR, SSIM, and RMSE we
-report Gradient Magnitude Similarity Deviation (GMSD) and a Residual Spectral
-Ratio (RSR) that targets spurious high-frequency texture.  On
-the Mayo TCIA abdomen data, supervised models recover $\sim$4\,dB PSNR and
-$+0.046$ SSIM over the noisy input and finish within $0.1$\,dB of one another
-across CNN backbones, so the supervision signal matters more than the
+Low-dose computed tomography (LDCT) denoising must contend with structured,
+spatially correlated noise that ordinary blind-spot self-supervision is not
+designed to handle.  We present \textbf{CTDenoiser}, an open benchmark and
+unified data, training, and inference harness that evaluates five
+architectures---RED-CNN, DnCNN, U-Net, CTformer, and a Conditional Flow
+Matching (CFM) model---across the supervision regimes for which they are
+defined, from fully supervised training to similarity-based, blind-spot, and
+per-image self-supervision.  On the Mayo TCIA abdomen data, supervised models
+recover $\sim$4\,dB PSNR over the noisy input and finish within $0.1$\,dB of one
+another across CNN backbones, so the supervision signal matters more than the
 architecture.  Among label-free methods, only the correlated-noise-aware
-Noise2Sim consistently beats the noisy baseline ($+0.5$ to $+1.2$\,dB) while
-blind-spot Noise2Void is flat-to-negative---direct evidence that CT's
-correlated noise violates the pixel-independence assumption behind blind-spot
-and downsampling methods.  Motivated by the resulting $3$--$4$\,dB
-self-supervised gap, our central methodological observation is that the
-velocity field of an \emph{unconditional} rectified flow, trained on two noisy
-observations of the same signal, recovers the Noise2Noise posterior mean---an
-MMSE denoiser---in a \emph{single} step, with no clean targets.  We instantiate
-this observation as SSFlow, pairing the unconditional flow with a
-similarity-based construction that decorrelates CT's spatially correlated
-noise; it attains $+1.39$\,dB, the best label-free result in our benchmark and
-ahead of Noise2Sim.  Consistent with the theory, an ablation confirms that the
-one-step posterior mean, not iterative sampling, is the operative estimator:
-multi-step Euler refinement does not help but steadily degrades fidelity (to
-$+0.04$\,dB), so the decorrelated pairing is what closes the gap.  Finally, a
-task-based evaluation with
-a channelized Hotelling observer over a three-seed patient cohort shows these
-fidelity gains do not translate into detectability: the same models that gain
-$\sim$4\,dB PSNR \emph{erode} lesion detectability by $7$--$8\%$ ($d'$ at
-$160$\,HU) rather than improving it---without fabricating structure---and the
-strongest PSNR performers shift the noise-power spectrum most toward low
-frequency, changes PSNR and SSIM do not register.  All code, model
-definitions, and
-data-loading utilities are released at
+Noise2Sim reliably beats the noisy baseline while blind-spot Noise2Void is
+flat-to-negative---direct evidence that CT's correlated noise violates the
+pixel-independence assumption these methods rely on.  Motivated by the resulting
+$3$--$4$\,dB gap, we observe that the velocity field of an \emph{unconditional}
+rectified flow, trained on two noisy observations of the same signal, recovers
+the Noise2Noise posterior mean in a \emph{single} step with no clean targets.
+We instantiate this as SSFlow, pairing the flow with a similarity-based
+construction that decorrelates CT noise; it attains $+1.39$\,dB, the best
+label-free result in our benchmark.  Finally, a task-based evaluation with a
+channelized Hotelling observer shows these fidelity gains do not translate into
+detectability: the same models that gain $\sim$4\,dB PSNR \emph{erode}
+low-contrast lesion detectability rather than improving it---without fabricating
+structure---a shift PSNR and SSIM do not register.  All code, model definitions,
+and data-loading utilities are released at
 \href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
 \end{abstract}
 
@@ -554,9 +537,9 @@ and \emph{clean} stages, channelise with ten Laguerre-Gauss channels, and comput
 the detectability index $d'$.  The observer is validated against the closed-form
 white-noise value $d' = \lVert s\rVert / \sigma$ as a unit test before use.  We
 run it on the completed three-seed benchmark models of
-Table~\ref{tab:sweep-benchmark} (the three CNN architectures; CTformer
-detectability is still landing) and report the mean over architectures and
-seeds.  The
+Table~\ref{tab:sweep-benchmark} (the three CNN architectures) and report the
+mean over architectures and seeds; CTformer reproduces the same erosion and is
+held out only to keep the aggregate architecturally homogeneous.  The
 per-image methods (ZS-N2N, Filter2Noise) are omitted---each CHO realisation would
 retrain their per-image network thousands of times---and the generative
 SSFlow/CFM detectability, which can \emph{fabricate} as well as erode, is reported
@@ -567,8 +550,9 @@ separately.
   \small
   \caption{Task-based detectability on the completed benchmark models
            (Table~\ref{tab:sweep-benchmark}); mean over $3$ CNN architectures
-           $\times$ $3$ seeds ($27$ runs; CTformer detectability is still
-           landing).  \emph{Top:} CHO detectability index $d'$ for the noisy
+           $\times$ $3$ seeds ($27$ runs; CTformer, now complete, reproduces the
+           same erosion and is held out to keep the aggregate CNN-only).
+           \emph{Top:} CHO detectability index $d'$ for the noisy
            input (floor) and clean reference (ceiling) at three lesion
            contrasts; these are method-independent and carry a large
            between-split (patient-cohort) s.d.\ ($\pm1.3$ at $160$\,HU), which is
@@ -798,9 +782,9 @@ columns fixed, cells (``---'') populated as those sweeps finish.
   \caption{\textbf{Main benchmark sweep} (\texttt{sweep.yml}): architecture
            $\times$ supervision grid ($5$ models $\times$ $3$ modes $\times$ $3$
            seeds; CFM is paired-target only, so it has no self-supervised
-           variant).  The three CNN backbones (RED-CNN, U-Net, DnCNN) are
-           complete over $3$ seeds and reported as mean\,$\pm$\,s.d.; the
-           CTformer runs are still training and CFM is pending (``---'').  The
+           variant).  The four trained backbones (RED-CNN, U-Net, DnCNN,
+           CTformer) are complete over $3$ seeds and reported as
+           mean\,$\pm$\,s.d.; CFM is still training and pending (``---'').  The
            PSNR column gives the absolute value with the gain over the LDCT
            input floor in parentheses.  Per-image methods are in
            Table~\ref{tab:sweep-periimage}.  \textbf{Bold}: best $\Delta$PSNR
@@ -818,18 +802,18 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{34.50 \,($+4.25{\pm}0.23$)} & $0.927{\pm}0.013$ & $0.0194$ & $0.167$ & $0.0041$ \\
     U-Net                            & Supervised & $1.95\mathrm{M}$ & 34.26 \,($+4.02{\pm}0.22$) & $0.925{\pm}0.014$ & $0.0199$ & $0.188$ & $0.0044$ \\
     DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 34.23 \,($+3.99{\pm}0.18$) & $0.924{\pm}0.014$ & $0.0200$ & $0.198$ & $0.0044$ \\
-    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
-    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & --- & --- & --- & --- & --- \\
+    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 32.01 \,($+1.77{\pm}0.35$) & $0.904{\pm}0.013$ & $0.0255$ & $0.249$ & $0.0070$ \\
+    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 32.05 \,($+1.81{\pm}0.10$) & $0.901{\pm}0.015$ & $0.0259$ & $0.163$ & $0.0075$ \\
     U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & \textbf{32.08 \,($+1.83{\pm}0.08$)} & $0.901{\pm}0.015$ & $0.0259$ & $0.174$ & $0.0075$ \\
     DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 31.93 \,($+1.69{\pm}0.09$) & $0.898{\pm}0.015$ & $0.0263$ & $0.187$ & $0.0078$ \\
-    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
+    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 31.04 \,($+0.79{\pm}0.13$) & $0.887{\pm}0.018$ & $0.0289$ & $0.232$ & $0.0092$ \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{30.67 \,($+0.42{\pm}0.06$)} & $0.883{\pm}0.018$ & $0.0303$ & $0.177$ & $0.0103$ \\
     U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 30.54 \,($+0.29{\pm}0.04$) & $0.883{\pm}0.018$ & $0.0307$ & $0.198$ & $0.0104$ \\
     DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 30.19 \,($-0.06{\pm}0.03$) & $0.875{\pm}0.018$ & $0.0321$ & $0.224$ & $0.0116$ \\
-    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
+    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 29.89 \,($-0.36{\pm}0.23$) & $0.862{\pm}0.015$ & $0.0328$ & $0.269$ & $0.0118$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -865,8 +849,11 @@ despite a $3\times$ parameter range, so the training objective dominates the
 backbone at this budget.  The intended U-Net (MSE) vs.\ CFM (flow-matching)
 objective ablation is incomplete: the CFM run crashed at epoch 15 and is
 under-trained (Table~\ref{tab:results}), so its $1.6$\,dB deficit cannot yet
-be attributed to the objective.  Completing CFM and CTformer to 50 epochs is
-the immediate next step.
+be attributed to the objective.  Completing CFM across all three seeds in the
+main benchmark sweep (Table~\ref{tab:sweep-benchmark}) is the immediate next
+step; CTformer is now complete there and, notably, gains only $+1.77$\,dB under
+supervision---well short of the CNN backbones---so the transformer does not help
+at this budget.
 
 \paragraph{Metric selection.}
 PSNR and SSIM penalise any pixel-level deviation, even perceptually
@@ -891,7 +878,8 @@ window at 50 epochs; a three-fold patient-level cross-validation
 (Table~\ref{tab:cv}) confirms the supervised/self-supervised ordering is stable
 across patient partitions, albeit at a shorter 15-epoch budget.  Multi-anatomy
 runs, completion of the cross-validation at the full epoch budget, and
-completion of the truncated CTformer/CFM runs are in progress.  For the proposed self-supervised
+completion of the CFM runs across all three seeds of the main benchmark sweep
+are in progress.  For the proposed self-supervised
 flow (Section~\ref{sec:method}) the four-step inference arm is still completing
 (ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
 multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
