@@ -459,6 +459,13 @@ def main(argv=None):
                         help="patch radius used to score pixel similarity (n2sim)")
     parser.add_argument("--n2sim-num-similar", type=int, default=1,
                         help="number of best matches averaged into the target (n2sim)")
+    parser.add_argument("--n2sim-exclude-radius", type=int, default=1,
+                        help="decorrelation radius: candidate matches within this "
+                             "box of the query are skipped (n2sim). 1 = original "
+                             "self-only exclusion; 2/3 push matches beyond the FBP "
+                             "noise-correlation length, matching SSFlow's "
+                             "exclude-radius so regression and flow can be "
+                             "compared at identical pairing.")
     parser.add_argument("--ssflow-pairing", choices=["similarity", "downsample"],
                         default="similarity",
                         help="noisy-pair construction for ssflow: similarity "
@@ -770,6 +777,7 @@ def main(argv=None):
                         search_radius=args.n2sim_search_radius,
                         patch_radius=args.n2sim_patch_radius,
                         num_similar=args.n2sim_num_similar,
+                        exclude_radius=args.n2sim_exclude_radius,
                     )
                     loss = model.flow_loss_to_target(low, target)
                 else:
@@ -779,6 +787,7 @@ def main(argv=None):
                         search_radius=args.n2sim_search_radius,
                         patch_radius=args.n2sim_patch_radius,
                         num_similar=args.n2sim_num_similar,
+                        exclude_radius=args.n2sim_exclude_radius,
                     )
             elif args.training_mode == "ssflow":
                 # Self-supervised rectified flow on manufactured noisy pairs.
