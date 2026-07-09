@@ -118,15 +118,25 @@ def n2v_training_step(
 # ----------------------------------------------------------------------------
 
 @torch.no_grad()
-def make_similarity_target(noisy, search_radius=4, patch_radius=1, num_similar=1):
+def make_similarity_target(noisy, search_radius=4, patch_radius=1, num_similar=1,
+                           exclude_radius=1):
     """Build the per-pixel similarity target for Noise2Sim.
 
     For every pixel of ``noisy`` ``(B, 1, H, W)`` we scan all spatial offsets in
-    a ``(2*search_radius+1)`` window (excluding the pixel itself), score each
-    candidate by the mean squared patch difference over a
-    ``(2*patch_radius+1)`` neighbourhood, and replace the pixel by the average
-    of its ``num_similar`` best-matching candidate values. Returns a tensor of
-    the same shape as ``noisy``.
+    a ``(2*search_radius+1)`` window (excluding a ``(2*exclude_radius-1)`` box
+    around the pixel itself), score each candidate by the mean squared patch
+    difference over a ``(2*patch_radius+1)`` neighbourhood, and replace the pixel
+    by the average of its ``num_similar`` best-matching candidate values. Returns
+    a tensor of the same shape as ``noisy``.
+
+    ``exclude_radius`` is the correlated-noise decorrelation knob (matching
+    :func:`ctdenoiser.models.ssflow.make_similarity_pairs`): candidate offsets
+    with ``max(|dy|, |dx|) < exclude_radius`` are skipped so the matched pixel
+    lies beyond the FBP noise-correlation length. ``exclude_radius=1`` excludes
+    only the pixel itself (the original Noise2Sim behaviour); ``2``/``3`` push
+    matches past the near-neighbour correlation. This lets a direct regression
+    estimator use the *same* decorrelated pairs as the SSFlow velocity net, so
+    the flow and the regression can be compared at identical pairing.
 
     Fully vectorised: borders use refl/replicate padding so every pixel has a
     full candidate set, and the patch distance uses an average pool with
@@ -139,8 +149,8 @@ def make_similarity_target(noisy, search_radius=4, patch_radius=1, num_similar=1
     dists, vals = [], []
     for dy in range(-r, r + 1):
         for dx in range(-r, r + 1):
-            if dy == 0 and dx == 0:
-                continue  # exclude self so the target is a *different* pixel
+            if max(abs(dy), abs(dx)) < exclude_radius:
+                continue  # skip the excluded box so the target is decorrelated
             shifted = padded[:, :, r + dy : r + dy + h, r + dx : r + dx + w]
             sq = (noisy - shifted) ** 2
             dist = F.avg_pool2d(
@@ -164,18 +174,22 @@ def n2sim_training_step(
     search_radius=4,
     patch_radius=1,
     num_similar=1,
+    exclude_radius=1,
 ):
     """Compute the Noise2Sim similarity loss for a batch of noisy images.
 
     ``noisy`` is ``(B, 1, H, W)``. A per-pixel similarity target is built with
     :func:`make_similarity_target` (no gradient) and the model regresses the
     full noisy image onto it. Returns a differentiable scalar MSE.
+    ``exclude_radius`` (default ``1``, the original behaviour) selects the
+    decorrelation distance of the paired target.
     """
     target = make_similarity_target(
         noisy,
         search_radius=search_radius,
         patch_radius=patch_radius,
         num_similar=num_similar,
+        exclude_radius=exclude_radius,
     )
     pred = model(noisy)
     return F.mse_loss(pred, target)
