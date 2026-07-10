@@ -6,7 +6,8 @@ Why this exists (and how it differs from the other scripts)
 -----------------------------------------------------------
 ``analyze_sweep.py`` keeps the best run *per model* and ``sweep_report.py``
 groups *per training mode* — neither understands the two axes that the dedicated
-``sweep_ssflow.yml`` grid actually varies:
+``sweep_hallucination.yml`` grid (which supersedes the retired ``sweep_ssflow.yml``)
+actually varies:
 
   * ``ssflow-exclude-radius`` ∈ {1, 2, 3}  — the correlated-noise knob. r=1 is
     the Noise2Sim target (self-exclusion only); r=2,3 push matched pixels beyond

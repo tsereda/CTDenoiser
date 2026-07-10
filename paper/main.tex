@@ -730,11 +730,15 @@ best-validation-PSNR epoch.
 
 \subsection{Per-sweep result tables}
 \label{sec:sweep-tables}
-The three grid sweeps that drive this study each populate a dedicated table,
+The four grid sweeps that drive this study each populate a dedicated table,
 reported here as their runs complete.  Table~\ref{tab:ssflow-steps} is the
 inference-steps ablation above (\texttt{sweep\_hallucination.yml}), filled from
 the current export with an explicit \emph{epoch} column because the four-step
-arm is still training; Table~\ref{tab:sweep-benchmark} (\texttt{sweep.yml}) and
+arm is still training; Table~\ref{tab:flow-vs-reg}
+(\texttt{sweep\_flow\_vs\_reg.yml}) is its regression control, holding the
+similarity pairing fixed and swapping the flow estimator for a direct Noise2Sim
+regressor to isolate \emph{why} SSFlow trails Noise2Sim;
+Table~\ref{tab:sweep-benchmark} (\texttt{sweep.yml}) and
 Table~\ref{tab:sweep-periimage} (\texttt{sweep\_periimage.yml}) give the
 architecture\,$\times$\,supervision and per-image grids as scaffolds---rows and
 columns fixed, cells (``---'') populated as those sweeps finish.
@@ -772,6 +776,54 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     $4$ & $1$ & $39$ & 31.96 \,(+0.52) & 0.903 & 0.0257 & 0.176 & 0.0070 & --- \\
     $4$ & $2$ & $44$ & 31.92 \,(+0.48) & 0.902 & 0.0257 & 0.192 & 0.0070 & --- \\
     $4$ & $3$ & $48$ & 31.52 \,(+0.08) & 0.895 & 0.0268 & 0.195 & 0.0076 & --- \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{\textbf{Flow-vs-regression control} (\texttt{sweep\_flow\_vs\_reg.yml}):
+           \emph{why} does SSFlow trail Noise2Sim when the one-step theorem
+           (Section~\ref{sec:rf-n2n}) says they share the MMSE target
+           $\mathbb{E}[s\mid x]$?  We hold the similarity pairing fixed and vary
+           only the estimator.  The \emph{regression} arm is a direct Noise2Sim
+           regressor (RED-CNN backbone, $1.85\mathrm{M}$ params, capacity-comparable
+           to SSFlow's $2.11\mathrm{M}$ velocity net) trained on SSFlow's exact
+           decorrelated pairs; the \emph{flow} arm is one-step SSFlow
+           (\texttt{sweep\_hallucination.yml}).  Both sweep the exclude-radius
+           $r\in\{1,2,3\}$ over $3$ seeds ($9$ runs each), so the two arms overlay
+           cell-for-cell.  \emph{Scaffold}---data cells (``---'') are populated as
+           the sweeps finish; means will be mean\,$\pm$\,s.d.\ over $3$ seeds with
+           PSNR gain over the $30.25$\,dB $3$-seed input floor.  The decisive read
+           is regression$(r)$ vs.\ flow$(r)$ at matched $r$: if regression holds
+           near its seed-0 anchor ($r{=}1$ reproduces standard Noise2Sim,
+           $\sim{+}1.81$\,dB on RED-CNN) while flow stays at its one-step seed-0
+           anchors ($+0.77/+1.39/+0.85$\,dB at $r{=}1/2/3$;
+           Table~\ref{tab:ssflow-steps}), the \emph{flow objective} is the cost;
+           if regression also falls at $r{=}2/3$, the \emph{decorrelated pairs}
+           are.  The fabrication $d'$ (from \texttt{--eval-detectability}) checks
+           that neither estimator invents structure.  $\uparrow$/$\downarrow$:
+           higher/lower is better.}
+  \label{tab:flow-vs-reg}
+  \begin{tabular}{lcrccccc}
+    \toprule
+    \textbf{Estimator} & \textbf{Radius $r$} &
+    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ & fab.\ $d'$\,$\downarrow$ \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Reference}} \\
+    \quad LDCT input & --- & 30.25 & 0.876 & 0.0320 & 0.174 & 0.0115 & 0.028 \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Regression (Noise2Sim, RED-CNN) --- same pairs, direct MMSE}} \\
+    Regression & $1$ & --- & --- & --- & --- & --- & --- \\
+    Regression & $2$ & --- & --- & --- & --- & --- & --- \\
+    Regression & $3$ & --- & --- & --- & --- & --- & --- \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Flow (SSFlow, one-step) --- same pairs, rectified-flow objective}} \\
+    Flow & $1$ & --- & --- & --- & --- & --- & --- \\
+    Flow & $2$ & --- & --- & --- & --- & --- & --- \\
+    Flow & $3$ & --- & --- & --- & --- & --- & --- \\
     \bottomrule
   \end{tabular}
 \end{table*}

@@ -1,0 +1,89 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Flow-vs-regression controlled comparison: WHY does SSFlow trail Noise2Sim?
+#
+# The one-step SSFlow theorem says the unconditional flow and a direct Noise2Sim
+# regression share the same MMSE target E[s|x] -- yet in the main sweep SSFlow
+# (flowmatching+n2sim, exclude-radius 2) lands ~+0.9 dB while Noise2Sim regression
+# reaches ~+1.8 dB. This sweep isolates the cause by holding the *pairing* fixed
+# and varying only the *estimator*.
+#
+# This file is the REGRESSION arm: a direct Noise2Sim regressor (RED-CNN backbone,
+# ~1.85M params, comparable to SSFlow's ~2.1M velocity net) trained on the exact
+# decorrelated pairs SSFlow uses, swept over the same exclude-radius grid. Pair it
+# with the FLOW arm in sweep_hallucination.yml (ssflow, exclude-radius 1/2/3 x
+# 3 seeds, + --eval-steps-sweep for multi-step fabrication) -- run BOTH, then read:
+#
+#   * regression(r) vs flow(r) at matched exclude-radius -> the decisive contrast.
+#     If regression stays ~+1.8 across r while flow drops to +0.9, the FLOW
+#     formulation is the culprit (a clean finding: the rectified-flow objective is
+#     a strictly worse way to reach the N2N estimator than direct regression,
+#     despite the theorem). If regression ALSO falls at r=2/3, the decorrelated
+#     PAIRS are the cost, not the flow.
+#   * regression's own curve over exclude-radius: is the inverted-U a property of
+#     the pairs (appears for regression too) or of the flow (flow-only)?
+#
+# exclude-radius 1 reproduces the standard Noise2Sim already in the main sweep
+# (~+1.81 dB on RED-CNN); it is re-run here so the whole regression curve comes
+# from one identical config, removing any harness drift from the comparison.
+#
+# Grid = 3 exclude-radius x 3 seeds = 9 runs.
+parameters:
+  # Direct regression backbone, capacity-comparable to SSFlow's velocity net.
+  model:
+    value: redcnn
+  training-mode:
+    value: n2sim
+
+  epochs:
+    value: 50
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # Similarity-pair construction, pinned to SSFlow's defaults so the ONLY
+  # difference from the flow arm is regression-vs-flow, not the search geometry.
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  # The decorrelation knob -- the axis of interest. r=1 is standard Noise2Sim;
+  # r=2 matches SSFlow's default; r=3 overshoots. Mirrors sweep_hallucination.yml's
+  # ssflow-exclude-radius grid so the two arms overlay cell-for-cell.
+  n2sim-exclude-radius:
+    values:
+      - 1
+      - 2
+      - 3
+
+  # --- GPU throughput (match the main sweep so runtimes are comparable) ---
+  batch-size:
+    value: 32
+  num-workers:
+    value: 6
+  prefetch-factor:
+    value: 4
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability so each regression cell gets the same det/* columns
+  # as the flow arm -- lets the flow-vs-regression comparison extend to
+  # detectability and fabrication, not just PSNR.
+  - --eval-detectability
+  - --detectability-max-slices=200
