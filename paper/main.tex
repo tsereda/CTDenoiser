@@ -803,7 +803,12 @@ columns fixed, cells (``---'') populated as those sweeps finish.
            Table~\ref{tab:ssflow-steps}), the \emph{flow objective} is the cost;
            if regression also falls at $r{=}2/3$, the \emph{decorrelated pairs}
            are.  The fabrication $d'$ (from \texttt{--eval-detectability}) checks
-           that neither estimator invents structure.  $\uparrow$/$\downarrow$:
+           that neither estimator invents structure.  $\dagger$: provisional
+           $r{=}2$ flow value carried from the main sweep's 3-seed
+           \texttt{flowmatching+n2sim} cell ($5$-step Euler eval, $2$ of $3$ seeds
+           finished; fabrication $d'$ at the input floor); it is the only
+           multi-seed SSFlow number to date but is \emph{multi-step}, so the
+           dedicated one-step arm replaces it.  $\uparrow$/$\downarrow$:
            higher/lower is better.}
   \label{tab:flow-vs-reg}
   \begin{tabular}{lcrccccc}
@@ -820,9 +825,9 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     Regression & $2$ & --- & --- & --- & --- & --- & --- \\
     Regression & $3$ & --- & --- & --- & --- & --- & --- \\
     \midrule
-    \multicolumn{8}{l}{\emph{Flow (SSFlow, one-step) --- same pairs, rectified-flow objective}} \\
+    \multicolumn{8}{l}{\emph{Flow (SSFlow) --- same pairs, rectified-flow objective; one-step unless marked}} \\
     Flow & $1$ & --- & --- & --- & --- & --- & --- \\
-    Flow & $2$ & --- & --- & --- & --- & --- & --- \\
+    Flow & $2^{\dagger}$ & 31.27 \,($+0.92{\pm}0.03$) & $0.889{\pm}0.025$ & $0.0287$ & $0.187$ & $0.0097$ & $0.030$ \\
     Flow & $3$ & --- & --- & --- & --- & --- & --- \\
     \bottomrule
   \end{tabular}
