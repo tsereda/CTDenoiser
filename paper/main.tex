@@ -672,6 +672,17 @@ texture.  Consistent with that trade, val PSNR peaks early and then declines
 while GMSD keeps improving, so we checkpoint and report the
 best-validation-PSNR epoch.
 
+\emph{(iii) The pairing is the contribution; the flow is not.}  Holding the
+pairing fixed and swapping the estimator (Table~\ref{tab:flow-vs-reg}) isolates
+the objective: on the \emph{same} decorrelated pairs a direct regressor rises to
+$+2.00$\,dB at $r{=}2$---above standard Noise2Sim ($r{=}1$) and the best
+label-free result in our benchmark---while the flow stays at $+0.9$--$1.4$\,dB
+(early returns, $2$ of $3$ seeds).  So the decorrelated non-local pairing is the
+transferable idea, and the rectified-flow machinery is a liability, not an asset:
+one-step regression on these pairs is the estimator of choice.  This is the
+label-free echo of the supervised U-Net-vs-CFM gap of
+Section~\ref{sec:results}---flow trailing regression in both regimes.
+
 \subsection{Per-sweep result tables}
 \label{sec:sweep-tables}
 The architecture\,$\times$\,supervision benchmark (\texttt{sweep.yml}) is the
@@ -736,17 +747,18 @@ Table~\ref{tab:sweep-periimage}.
            decorrelated pairs; the \emph{flow} arm is one-step SSFlow
            (\texttt{sweep\_hallucination.yml}).  Both sweep the exclude-radius
            $r\in\{1,2,3\}$ over $3$ seeds ($9$ runs each), so the two arms overlay
-           cell-for-cell.  \emph{Scaffold}---data cells (``---'') are populated as
-           the sweeps finish; means will be mean\,$\pm$\,s.d.\ over $3$ seeds with
-           PSNR gain over the $30.25$\,dB $3$-seed input floor.  The decisive read
-           is regression$(r)$ vs.\ flow$(r)$ at matched $r$: if regression holds
-           near its seed-0 anchor ($r{=}1$ reproduces standard Noise2Sim,
-           $\sim{+}1.81$\,dB on RED-CNN) while flow stays at its one-step seed-0
-           anchors ($+0.77/+1.39/+0.85$\,dB at $r{=}1/2/3$;
-           Table~\ref{tab:ssflow-steps}), the \emph{flow objective} is the cost;
-           if regression also falls at $r{=}2/3$, the \emph{decorrelated pairs}
-           are.  The fabrication $d'$ (from \texttt{--eval-detectability}) checks
-           that neither estimator invents structure.  $\dagger$: provisional
+           cell-for-cell; the PSNR gain is over each split's own input floor.  The
+           decisive read is regression$(r)$ vs.\ flow$(r)$ at matched $r$.
+           \emph{Early returns} ($\ddagger$: regression $2$ of $3$ seeds finished)
+           give the \emph{flow-is-the-cost} verdict: the regressor \emph{rises} on
+           the decorrelated pairs ($+1.75\!\to\!+2.00$\,dB from $r{=}1$ to $r{=}2$,
+           lifting standard Noise2Sim), while the flow sits at $+0.9$--$1.4$\,dB on
+           the \emph{same} pairs---so the rectified-flow objective, not the pairing,
+           is what makes SSFlow trail.  The decorrelated-pairing regressor at
+           $r{=}2$ ($+2.00$\,dB) is the best label-free result in the benchmark.
+           The fabrication $d'$ (from \texttt{--eval-detectability}) confirms
+           neither estimator invents structure ($\approx$ input floor).
+           $\dagger$: provisional
            $r{=}2$ flow value carried from the main sweep's 3-seed
            \texttt{flowmatching+n2sim} cell ($5$-step Euler eval, $2$ of $3$ seeds
            finished; fabrication $d'$ at the input floor); it is the only
@@ -764,8 +776,8 @@ Table~\ref{tab:sweep-periimage}.
     \quad LDCT input & --- & 30.25 & 0.876 & 0.0320 & 0.174 & 0.0115 & 0.028 \\
     \midrule
     \multicolumn{8}{l}{\emph{Regression (Noise2Sim, RED-CNN) --- same pairs, direct MMSE}} \\
-    Regression & $1$ & --- & --- & --- & --- & --- & --- \\
-    Regression & $2$ & --- & --- & --- & --- & --- & --- \\
+    Regression & $1^{\ddagger}$ & 32.10 \,($+1.75{\pm}0.20$) & $0.900{\pm}0.021$ & $0.0258$ & $0.164$ & $0.0076$ & $0.031$ \\
+    Regression & $2^{\ddagger}$ & \textbf{32.35 \,($+2.00{\pm}0.13$)} & $0.904{\pm}0.021$ & $0.0250$ & $0.160$ & $0.0071$ & $0.033$ \\
     Regression & $3$ & --- & --- & --- & --- & --- & --- \\
     \midrule
     \multicolumn{8}{l}{\emph{Flow (SSFlow) --- same pairs, rectified-flow objective; one-step unless marked}} \\
