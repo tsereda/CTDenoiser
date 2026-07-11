@@ -834,9 +834,8 @@ columns fixed, cells (``---'') populated as those sweeps finish.
   \caption{\textbf{Main benchmark sweep} (\texttt{sweep.yml}): architecture
            $\times$ supervision grid ($5$ models $\times$ $3$ modes $\times$ $3$
            seeds; CFM is paired-target only, so it has no self-supervised
-           variant).  The four trained backbones (RED-CNN, U-Net, DnCNN,
-           CTformer) are complete over $3$ seeds and reported as
-           mean\,$\pm$\,s.d.; CFM is still training and pending (``---'').  The
+           variant).  All five architectures are complete over $3$ seeds and
+           reported as mean\,$\pm$\,s.d.  The
            PSNR column gives the absolute value with the gain over the LDCT
            input floor in parentheses.  Per-image methods are in
            Table~\ref{tab:sweep-periimage}.  \textbf{Bold}: best $\Delta$PSNR
@@ -855,7 +854,7 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     U-Net                            & Supervised & $1.95\mathrm{M}$ & 34.26 \,($+4.02{\pm}0.22$) & $0.925{\pm}0.014$ & $0.0199$ & $0.188$ & $0.0044$ \\
     DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 34.23 \,($+3.99{\pm}0.18$) & $0.924{\pm}0.014$ & $0.0200$ & $0.198$ & $0.0044$ \\
     CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 32.01 \,($+1.77{\pm}0.35$) & $0.904{\pm}0.013$ & $0.0255$ & $0.249$ & $0.0070$ \\
-    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & \emph{training} & --- & --- & --- & --- \\
+    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 33.09 \,($+2.84{\pm}0.22$) & $0.915{\pm}0.013$ & $0.0228$ & $0.192$ & $0.0057$ \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 32.05 \,($+1.81{\pm}0.10$) & $0.901{\pm}0.015$ & $0.0259$ & $0.163$ & $0.0075$ \\
     U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & \textbf{32.08 \,($+1.83{\pm}0.08$)} & $0.901{\pm}0.015$ & $0.0259$ & $0.174$ & $0.0075$ \\
@@ -898,14 +897,17 @@ columns fixed, cells (``---'') populated as those sweeps finish.
 \paragraph{Architecture vs.\ objective.}
 Under supervision the CNN backbones finish within $0.1$\,dB of one another
 despite a $3\times$ parameter range, so the training objective dominates the
-backbone at this budget.  The intended U-Net (MSE) vs.\ CFM (flow-matching)
-objective ablation is incomplete: the CFM run crashed at epoch 15 and is
-under-trained (Table~\ref{tab:results}), so its $1.6$\,dB deficit cannot yet
-be attributed to the objective.  Completing CFM across all three seeds in the
-main benchmark sweep (Table~\ref{tab:sweep-benchmark}) is the immediate next
-step; CTformer is now complete there and, notably, gains only $+1.77$\,dB under
-supervision---well short of the CNN backbones---so the transformer does not help
-at this budget.
+backbone at this budget.  The main benchmark sweep now completes both the
+architecture and the objective comparison across three seeds
+(Table~\ref{tab:sweep-benchmark}).  Two backbones underperform the CNNs even
+with paired targets: CTformer gains only $+1.77$\,dB and CFM $+2.84$\,dB under
+supervision, versus $\sim{+}4$\,dB for RED-CNN/U-Net/DnCNN.  Because our CFM
+shares the U-Net's velocity-net body, the U-Net (MSE) vs.\ CFM (flow-matching)
+contrast now isolates the objective at matched capacity: the flow-matching
+objective is a $\sim$1\,dB-worse route to the supervised optimum than direct MSE
+regression---a supervised-regime echo of the label-free flow-vs-regression gap
+that Section~\ref{sec:method} probes directly
+(Table~\ref{tab:flow-vs-reg}).
 
 \paragraph{Metric selection.}
 PSNR and SSIM penalise any pixel-level deviation, even perceptually
@@ -928,10 +930,11 @@ Table~\ref{tab:results}.
 The main results (Table~\ref{tab:results}) are single-split on the abdomen
 window at 50 epochs; a three-fold patient-level cross-validation
 (Table~\ref{tab:cv}) confirms the supervised/self-supervised ordering is stable
-across patient partitions, albeit at a shorter 15-epoch budget.  Multi-anatomy
-runs, completion of the cross-validation at the full epoch budget, and
-completion of the CFM runs across all three seeds of the main benchmark sweep
-are in progress.  For the proposed self-supervised
+across patient partitions, albeit at a shorter 15-epoch budget.  The main
+benchmark sweep (Table~\ref{tab:sweep-benchmark}) is complete across all five
+architectures and three seeds; multi-anatomy runs and completion of the
+cross-validation at the full epoch budget remain in progress.  For the proposed
+self-supervised
 flow (Section~\ref{sec:method}) the four-step inference arm is still completing
 (ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
 multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
