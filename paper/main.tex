@@ -44,7 +44,7 @@ architectures---RED-CNN, DnCNN, U-Net, CTformer, and a Conditional Flow
 Matching (CFM) model---across the supervision regimes for which they are
 defined, from fully supervised training to similarity-based, blind-spot, and
 per-image self-supervision.  On the Mayo TCIA abdomen data, supervised models
-recover $\sim$4\,dB PSNR over the noisy input and finish within $0.1$\,dB of one
+recover $\sim$4\,dB PSNR over the noisy input and finish within $0.3$\,dB of one
 another across CNN backbones, so the supervision signal matters more than the
 architecture.  Among label-free methods, only the correlated-noise-aware
 Noise2Sim reliably beats the noisy baseline while blind-spot Noise2Void is
@@ -380,10 +380,12 @@ radial centroid in the task-based evaluation of Section~\ref{sec:detect}.
 \subsection{Setup}
 
 Experiments use the TCIA LDCT-and-Projection-Data dataset~\cite{moen2021low}
-(abdomen window), with a patient-level split (seed 0): $6{,}683$ training
-and $1{,}476$ validation slices.  Trained models run for 50 epochs with
-patch size 64, batch size 4, and Adam at $10^{-4}$; the CFM model
-integrates the ODE with $K=20$ Euler steps during training and 5 at
+(abdomen window) with patient-level splits ($\sim$$6{,}500$ training and
+$\sim$$1{,}600$ validation slices per split).  The main benchmark
+(Table~\ref{tab:results}) reports the mean over three such splits; the SSFlow
+ablations (Section~\ref{sec:method}) use a single split (seed 0).  Trained models
+run for 50 epochs with patch size 64, batch size 4, and Adam at $10^{-4}$; the
+CFM model integrates the ODE with $K=20$ Euler steps during training and 5 at
 evaluation.  The per-image methods (ZS-N2N, Filter2Noise) optimise one
 network per validation image and are model-agnostic.  Validation metrics
 are computed over full slices using the corrected overlapped inference of
@@ -397,94 +399,75 @@ the floor every method must beat.
 \begin{table*}[t]
   \centering
   \small
-  \caption{Validation results on TCIA LDCT (abdomen; patient-level split,
-           seed 0; 50 epochs), grouped by supervision regime.  Means over
-           the validation set on full slices via overlapped tiling
-           (corrected border handling).  PSNR shows the gain over the
-           \emph{LDCT input} floor in parentheses.  $\uparrow$/$\downarrow$:
-           higher/lower is better.  \textbf{Bold}: best denoiser per metric.
-           ZS-N2N and Filter2Noise are per-image and model-agnostic (single
-           row each).  $\dagger$: run truncated by a crash, reported at its
-           last logged epoch (CTformer/Supervised ep.\,37,
-           CTformer/Noise2Sim ep.\,26).  $\ddagger$: CFM crashed at ep.\,15
-           and had not converged; shown for reference.  CFM requires paired
-           targets, so it has no blind-spot or similarity variant.  SSFlow
-           (ours) rows use one-step inference at 50 epochs; the one- vs.\
-           multi-step ablation is in Section~\ref{sec:method}.
-           \underline{Underline}: best \emph{label-free} result.}
+  \caption{\textbf{Main benchmark} (\texttt{sweep.yml}): validation results on
+           TCIA LDCT (abdomen; patient-level $3$-seed splits, $50$ epochs),
+           grouped by supervision regime.  Mean\,$\pm$\,s.d.\ over $3$ seeds on
+           full slices via overlapped tiling (corrected border handling).  The
+           PSNR column gives the absolute value with the gain over each split's
+           \emph{LDCT input} floor in parentheses (mean floor $30.25$\,dB).  All
+           five architectures are complete over $3$ seeds.  CFM requires paired
+           targets, so it has no blind-spot or similarity variant.  Per-image
+           methods (ZS-N2N, Filter2Noise) are in Table~\ref{tab:sweep-periimage};
+           the label-free SSFlow and its one- vs.\ multi-step ablation are in
+           Section~\ref{sec:method}.  \textbf{Bold}: best $\Delta$PSNR per
+           supervision block.  $\uparrow$/$\downarrow$: higher/lower is better.}
   \label{tab:results}
-  \begin{tabular}{llrlcccc}
+  \begin{tabular}{llrccccc}
     \toprule
     \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
     PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
     GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
     \midrule
-    LDCT input & --- (no denoising) & --- & 31.44 & 0.893 & 0.0274 & 0.166 & 0.0079 \\
+    LDCT input & --- (no denoising) & --- & $30.25$ & $0.876$ & $0.0320$ & $0.174$ & $0.0115$ \\
     \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{35.48} \,(+4.04) & \textbf{0.940} & 0.0171 & 0.166 & 0.0031 \\
-    U-Net                            & Supervised & $1.95\mathrm{M}$ & 35.47 \,(+4.04) & 0.940 & \textbf{0.0171} & 0.178 & \textbf{0.0030} \\
-    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 35.40 \,(+3.97) & 0.938 & 0.0172 & 0.184 & 0.0031 \\
-    CTformer~\cite{wang2022ctformer}$^{\dagger}$ & Supervised & $0.40\mathrm{M}$ & 34.78 \,(+3.34) & 0.917 & 0.0184 & 0.263 & 0.0036 \\
-    CFM~\cite{lipman2022flow}$^{\ddagger}$       & Supervised & $2.11\mathrm{M}$ & 33.87 \,(+2.43) & 0.923 & 0.0206 & 0.248 & 0.0044 \\
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{34.50 \,($+4.25{\pm}0.23$)} & $0.927{\pm}0.013$ & $0.0194$ & $0.167$ & $0.0041$ \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 34.26 \,($+4.02{\pm}0.22$) & $0.925{\pm}0.014$ & $0.0199$ & $0.188$ & $0.0044$ \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 34.23 \,($+3.99{\pm}0.18$) & $0.924{\pm}0.014$ & $0.0200$ & $0.198$ & $0.0044$ \\
+    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 33.09 \,($+2.84{\pm}0.22$) & $0.915{\pm}0.013$ & $0.0228$ & $0.192$ & $0.0057$ \\
+    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 32.01 \,($+1.77{\pm}0.35$) & $0.904{\pm}0.013$ & $0.0255$ & $0.249$ & $0.0070$ \\
     \midrule
-    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 32.61 \,(+1.18) & 0.910 & 0.0238 & 0.169 & 0.0060 \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 32.14 \,(+0.70) & 0.891 & 0.0251 & 0.178 & 0.0067 \\
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 31.94 \,(+0.51) & 0.904 & 0.0257 & \textbf{0.162} & 0.0070 \\
-    CTformer~\cite{wang2022ctformer}$^{\dagger}$ & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 31.09 \,($-0.35$) & 0.885 & 0.0282 & 0.247 & 0.0083 \\
+    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & \textbf{32.08 \,($+1.83{\pm}0.08$)} & $0.901{\pm}0.015$ & $0.0259$ & $0.174$ & $0.0075$ \\
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 32.05 \,($+1.81{\pm}0.10$) & $0.901{\pm}0.015$ & $0.0259$ & $0.163$ & $0.0075$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 31.93 \,($+1.69{\pm}0.09$) & $0.898{\pm}0.015$ & $0.0263$ & $0.187$ & $0.0078$ \\
+    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 31.04 \,($+0.79{\pm}0.13$) & $0.887{\pm}0.018$ & $0.0289$ & $0.232$ & $0.0092$ \\
     \midrule
-    SSFlow $r{=}2$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & \underline{32.83} \,(+1.39) & \underline{0.917} & \underline{0.0231} & 0.186 & \underline{0.0057} \\
-    SSFlow $r{=}3$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & 32.28 \,(+0.85) & 0.914 & 0.0246 & 0.189 & 0.0064 \\
-    SSFlow $r{=}1$ (ours) & Self-sup.\ flow & $2.11\mathrm{M}$ & 32.20 \,(+0.77) & 0.907 & 0.0249 & 0.183 & 0.0066 \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & 31.52 \,(+0.08) & 0.895 & 0.0271 & 0.175 & 0.0077 \\
-    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 31.49 \,(+0.05) & 0.893 & 0.0271 & 0.188 & 0.0078 \\
-    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 31.28 \,($-0.15$) & 0.894 & 0.0277 & 0.223 & 0.0081 \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 30.98 \,($-0.46$) & 0.885 & 0.0288 & 0.198 & 0.0087 \\
-    \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & 31.58 \,(+0.14) & 0.896 & 0.0269 & 0.176 & 0.0076 \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & 31.17 \,($-0.27$) & 0.892 & 0.0281 & 0.182 & 0.0083 \\
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{30.67 \,($+0.42{\pm}0.06$)} & $0.883{\pm}0.018$ & $0.0303$ & $0.177$ & $0.0103$ \\
+    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 30.54 \,($+0.29{\pm}0.04$) & $0.883{\pm}0.018$ & $0.0307$ & $0.198$ & $0.0104$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 30.19 \,($-0.06{\pm}0.03$) & $0.875{\pm}0.018$ & $0.0321$ & $0.224$ & $0.0116$ \\
+    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 29.89 \,($-0.36{\pm}0.23$) & $0.862{\pm}0.015$ & $0.0328$ & $0.269$ & $0.0118$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
 
-Table~\ref{tab:results} yields four findings.  \textbf{First}, supervised
-denoising gains $\sim$4\,dB PSNR and $+0.046$ SSIM over the noisy input, and
-RED-CNN, U-Net, and DnCNN finish within $0.1$\,dB of one another despite a
-$3\times$ range in parameter count, so the objective dominates the backbone.
+Table~\ref{tab:results} yields three findings.  \textbf{First}, supervised
+denoising gains $\sim$4\,dB PSNR over the noisy input, and RED-CNN, U-Net, and
+DnCNN finish within $0.3$\,dB of one another despite a $3\times$ range in
+parameter count; the transformer (CTformer, $+1.77$\,dB) and the generative flow
+(CFM, $+2.84$\,dB) both trail the CNNs even with paired targets, so the objective
+and a simple convolutional inductive bias dominate the backbone.
 \textbf{Second}, among label-free methods only the correlated-noise-aware
-Noise2Sim consistently exceeds the noisy floor ($+0.5$ to $+1.2$\,dB),
-whereas blind-spot Noise2Void is flat-to-negative ($-0.46$\,dB and $-0.008$
-SSIM on DnCNN) and the zero-shot ZS-N2N sits essentially at the floor; this
-is direct evidence that FBP-correlated CT noise violates the
-pixel-independence assumption these methods rely on.  \textbf{Third}, the
-$3$--$4$\,dB gap between the best self-supervised result and the supervised
-upper bound quantifies the headroom for correlated-noise-aware
-self-supervision, which motivates the method of Section~\ref{sec:method}.
-\textbf{Fourth}, that method---our self-supervised rectified flow
-(SSFlow)---closes part of this gap: at $r{=}2$ it reaches $+1.39$\,dB, the best
-label-free result in the table and ahead of the strongest Noise2Sim backbone
-($+1.18$\,dB), while also leading every label-free method on SSIM, RMSE, and
-RSR.
-CTformer and CFM runs were truncated by crashes and are reported at their
-last logged epoch; completing them, together with multi-anatomy and
-multi-seed evaluation, is in progress.
+Noise2Sim consistently exceeds the noisy floor ($+1.7$ to $+1.8$\,dB), whereas
+blind-spot Noise2Void is flat-to-negative ($-0.06$\,dB on DnCNN); this is direct
+evidence that FBP-correlated CT noise violates the pixel-independence assumption
+these methods rely on.  \textbf{Third}, the $3$--$4$\,dB gap between the best
+self-supervised method and the supervised upper bound quantifies the headroom
+for correlated-noise-aware self-supervision---the gap our self-supervised
+rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
-\paragraph{Cross-validation robustness.}
-To check that the single-split ordering above is not an artefact of one
-patient partition, we repeat the regime comparison under a three-fold,
-patient-level cross-validation at a reduced 15-epoch budget
-(Table~\ref{tab:cv}).  The folds differ in difficulty---their unprocessed
-LDCT-input PSNR is $31.44$, $30.04$, and $29.27$\,dB---so we report the gain
-over each fold's \emph{own} input floor, averaged across folds ($\pm$ s.d.).
-The DnCNN and RED-CNN backbones, which completed all three folds, preserve the
-regime ordering of Table~\ref{tab:results} with a tight per-fold spread:
-supervised training gains $+4.0$ to $+4.2$\,dB ($\pm0.22$); Noise2Sim is again
-the only label-free method to clear the floor by a decisive margin
-($+1.74\pm0.09$\,dB on RED-CNN); and Noise2Void, Filter2Noise, and ZS-N2N stay
-within noise of the input ($|\Delta\text{PSNR}|\le0.32$\,dB).  Absolute PSNR
-runs $\sim$1\,dB below Table~\ref{tab:results} because these models train for 15
-rather than 50 epochs, but the \emph{relative} ordering---the paper's central
-claim---is unchanged across every fold.
+\paragraph{Per-fold stability and convergence.}
+The benchmark reports each regime as a $3$-seed mean; to confirm the ordering is
+stable \emph{per fold} and established early in training, we repeat the RED-CNN
+and DnCNN comparison on the same three folds at a reduced 15-epoch budget
+(Table~\ref{tab:cv}), reporting the gain over each fold's \emph{own} input floor
+($31.44/30.04/29.27$\,dB) averaged across folds ($\pm$ s.d.).  The ordering is
+preserved with a tight per-fold spread: supervised gains $+4.0$ to $+4.2$\,dB
+($\pm0.22$); Noise2Sim is again the only label-free method to clear the floor by
+a decisive margin ($+1.74\pm0.09$\,dB on RED-CNN); and Noise2Void, Filter2Noise,
+and ZS-N2N stay within noise of the input ($|\Delta\text{PSNR}|\le0.32$\,dB).
+Absolute PSNR at 15 epochs is already within $\sim$0.1\,dB of the 50-epoch
+benchmark (RED-CNN supervised $34.43$ vs.\ $34.50$\,dB), so the regime
+ordering---the paper's central claim---is established early and holds on every
+fold.
 
 \begin{table*}[t]
   \centering
@@ -537,7 +520,7 @@ and \emph{clean} stages, channelise with ten Laguerre-Gauss channels, and comput
 the detectability index $d'$.  The observer is validated against the closed-form
 white-noise value $d' = \lVert s\rVert / \sigma$ as a unit test before use.  We
 run it on the completed three-seed benchmark models of
-Table~\ref{tab:sweep-benchmark} (the three CNN architectures) and report the
+Table~\ref{tab:results} (the three CNN architectures) and report the
 mean over architectures and seeds; CTformer reproduces the same erosion and is
 held out only to keep the aggregate architecturally homogeneous.  The
 per-image methods (ZS-N2N, Filter2Noise) are omitted---each CHO realisation would
@@ -549,7 +532,7 @@ separately.
   \centering
   \small
   \caption{Task-based detectability on the completed benchmark models
-           (Table~\ref{tab:sweep-benchmark}); mean over $3$ CNN architectures
+           (Table~\ref{tab:results}); mean over $3$ CNN architectures
            $\times$ $3$ seeds ($27$ runs; CTformer, now complete, reproduces the
            same erosion and is held out to keep the aggregate CNN-only).
            \emph{Top:} CHO detectability index $d'$ for the noisy
@@ -591,7 +574,7 @@ $\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
 lesions are nearly as detectable in the noisy image as in the noise-free one.
 \textbf{Second}, although these same models gain $4.0$--$4.3$\,dB PSNR
 (supervised) and $1.7$--$1.8$\,dB (Noise2Sim) over the input
-(Table~\ref{tab:sweep-benchmark}), none improves detectability at the
+(Table~\ref{tab:results}), none improves detectability at the
 supra-threshold operating point: $d'_\text{denoised} < d'_\text{input}$ in all
 $27$ runs---a $7$--$8\%$ loss at $160$\,HU---and none exceeds the clean ceiling,
 while the fabrication $d'$ on signal-absent ROIs stays at its floor
@@ -730,18 +713,17 @@ best-validation-PSNR epoch.
 
 \subsection{Per-sweep result tables}
 \label{sec:sweep-tables}
-The four grid sweeps that drive this study each populate a dedicated table,
-reported here as their runs complete.  Table~\ref{tab:ssflow-steps} is the
-inference-steps ablation above (\texttt{sweep\_hallucination.yml}), filled from
-the current export with an explicit \emph{epoch} column because the four-step
-arm is still training; Table~\ref{tab:flow-vs-reg}
-(\texttt{sweep\_flow\_vs\_reg.yml}) is its regression control, holding the
-similarity pairing fixed and swapping the flow estimator for a direct Noise2Sim
-regressor to isolate \emph{why} SSFlow trails Noise2Sim;
-Table~\ref{tab:sweep-benchmark} (\texttt{sweep.yml}) and
-Table~\ref{tab:sweep-periimage} (\texttt{sweep\_periimage.yml}) give the
-architecture\,$\times$\,supervision and per-image grids as scaffolds---rows and
-columns fixed, cells (``---'') populated as those sweeps finish.
+The architecture\,$\times$\,supervision benchmark (\texttt{sweep.yml}) is the
+main results table, Table~\ref{tab:results} in Section~\ref{sec:results}; here we
+report the flow-specific and per-image grids that drive the method.
+Table~\ref{tab:ssflow-steps} is the inference-steps ablation above
+(\texttt{sweep\_hallucination.yml}), filled from the current export with an
+explicit \emph{epoch} column because the four-step arm is still training;
+Table~\ref{tab:flow-vs-reg} (\texttt{sweep\_flow\_vs\_reg.yml}) is its regression
+control, holding the similarity pairing fixed and swapping the flow estimator for
+a direct Noise2Sim regressor to isolate \emph{why} SSFlow trails Noise2Sim; and
+Table~\ref{tab:sweep-periimage} (\texttt{sweep\_periimage.yml}) gives the
+per-image grid, cells (``---'') populated as that sweep finishes.
 
 \begin{table*}[t]
   \centering
@@ -836,53 +818,14 @@ columns fixed, cells (``---'') populated as those sweeps finish.
 \begin{table*}[t]
   \centering
   \small
-  \caption{\textbf{Main benchmark sweep} (\texttt{sweep.yml}): architecture
-           $\times$ supervision grid ($5$ models $\times$ $3$ modes $\times$ $3$
-           seeds; CFM is paired-target only, so it has no self-supervised
-           variant).  All five architectures are complete over $3$ seeds and
-           reported as mean\,$\pm$\,s.d.  The
-           PSNR column gives the absolute value with the gain over the LDCT
-           input floor in parentheses.  Per-image methods are in
-           Table~\ref{tab:sweep-periimage}.  \textbf{Bold}: best $\Delta$PSNR
-           per supervision block.  $\uparrow$/$\downarrow$: higher/lower is
-           better.}
-  \label{tab:sweep-benchmark}
-  \begin{tabular}{llrccccc}
-    \toprule
-    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
-    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    LDCT input & --- (no denoising) & --- & $30.25$ & $0.876$ & $0.0320$ & $0.174$ & $0.0115$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{34.50 \,($+4.25{\pm}0.23$)} & $0.927{\pm}0.013$ & $0.0194$ & $0.167$ & $0.0041$ \\
-    U-Net                            & Supervised & $1.95\mathrm{M}$ & 34.26 \,($+4.02{\pm}0.22$) & $0.925{\pm}0.014$ & $0.0199$ & $0.188$ & $0.0044$ \\
-    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 34.23 \,($+3.99{\pm}0.18$) & $0.924{\pm}0.014$ & $0.0200$ & $0.198$ & $0.0044$ \\
-    CTformer~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 32.01 \,($+1.77{\pm}0.35$) & $0.904{\pm}0.013$ & $0.0255$ & $0.249$ & $0.0070$ \\
-    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 33.09 \,($+2.84{\pm}0.22$) & $0.915{\pm}0.013$ & $0.0228$ & $0.192$ & $0.0057$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & 32.05 \,($+1.81{\pm}0.10$) & $0.901{\pm}0.015$ & $0.0259$ & $0.163$ & $0.0075$ \\
-    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & \textbf{32.08 \,($+1.83{\pm}0.08$)} & $0.901{\pm}0.015$ & $0.0259$ & $0.174$ & $0.0075$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 31.93 \,($+1.69{\pm}0.09$) & $0.898{\pm}0.015$ & $0.0263$ & $0.187$ & $0.0078$ \\
-    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 31.04 \,($+0.79{\pm}0.13$) & $0.887{\pm}0.018$ & $0.0289$ & $0.232$ & $0.0092$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{30.67 \,($+0.42{\pm}0.06$)} & $0.883{\pm}0.018$ & $0.0303$ & $0.177$ & $0.0103$ \\
-    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 30.54 \,($+0.29{\pm}0.04$) & $0.883{\pm}0.018$ & $0.0307$ & $0.198$ & $0.0104$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 30.19 \,($-0.06{\pm}0.03$) & $0.875{\pm}0.018$ & $0.0321$ & $0.224$ & $0.0116$ \\
-    CTformer~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 29.89 \,($-0.36{\pm}0.23$) & $0.862{\pm}0.015$ & $0.0328$ & $0.269$ & $0.0118$ \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
-\begin{table*}[t]
-  \centering
-  \small
   \caption{\textbf{Per-image sweep} (\texttt{sweep\_periimage.yml}): test-time,
-           data-free methods, model-agnostic ($2$ modes $\times$ $3$ seeds;
-           single row each, to be reported as mean$\pm$s.d.).
-           \emph{Scaffold}---data cells (``---'') are populated as the sweep
-           completes.  PSNR shows the gain over the LDCT input floor.
-           $\uparrow$/$\downarrow$: higher/lower is better.}
+           data-free methods, model-agnostic.  Values shown are single-split
+           seed-0 (floor $31.44$\,dB; $\Delta$ over that floor); the $3$-seed
+           means ($2$ modes $\times$ $3$ seeds) are pending and will match the
+           benchmark's $30.25$\,dB floor.  Both methods sit essentially at the
+           noisy floor---consistent with the label-free ordering in
+           Table~\ref{tab:results}.  $\uparrow$/$\downarrow$: higher/lower is
+           better.}
   \label{tab:sweep-periimage}
   \begin{tabular}{llrccccc}
     \toprule
@@ -890,8 +833,8 @@ columns fixed, cells (``---'') populated as those sweeps finish.
     PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
     GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
     \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & --- & --- & --- & --- & --- \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & --- & --- & --- & --- & --- \\
+    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & 31.58 \,(+0.14) & 0.896 & 0.0269 & 0.176 & 0.0076 \\
+    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & 31.17 \,($-0.27$) & 0.892 & 0.0281 & 0.182 & 0.0083 \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -900,11 +843,11 @@ columns fixed, cells (``---'') populated as those sweeps finish.
 \section{Discussion}
 
 \paragraph{Architecture vs.\ objective.}
-Under supervision the CNN backbones finish within $0.1$\,dB of one another
+Under supervision the CNN backbones finish within $0.3$\,dB of one another
 despite a $3\times$ parameter range, so the training objective dominates the
 backbone at this budget.  The main benchmark sweep now completes both the
 architecture and the objective comparison across three seeds
-(Table~\ref{tab:sweep-benchmark}).  Two backbones underperform the CNNs even
+(Table~\ref{tab:results}).  Two backbones underperform the CNNs even
 with paired targets: CTformer gains only $+1.77$\,dB and CFM $+2.84$\,dB under
 supervision, versus $\sim{+}4$\,dB for RED-CNN/U-Net/DnCNN.  Because our CFM
 shares the U-Net's velocity-net body, the U-Net (MSE) vs.\ CFM (flow-matching)
@@ -932,21 +875,17 @@ CT-denoising work report task-based $d'$ alongside the five metrics in
 Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
-The main results (Table~\ref{tab:results}) are single-split on the abdomen
-window at 50 epochs; a three-fold patient-level cross-validation
-(Table~\ref{tab:cv}) confirms the supervised/self-supervised ordering is stable
-across patient partitions, albeit at a shorter 15-epoch budget.  The main
-benchmark sweep (Table~\ref{tab:sweep-benchmark}) is complete across all five
-architectures and three seeds; multi-anatomy runs and completion of the
-cross-validation at the full epoch budget remain in progress.  For the proposed
-self-supervised
-flow (Section~\ref{sec:method}) the four-step inference arm is still completing
-(ep.\,38--46), though its one- vs.\ multi-step trend is already unambiguous;
-multi-seed SSFlow runs and a head-to-head at matched epochs remain to be
-finalised.  The detectability evaluation (Section~\ref{sec:detect}) covers the
-15-epoch cross-validation models and the deterministic denoisers; the
-generative SSFlow and CFM detectability---where fabrication, not just erosion,
-can arise---is in progress.
+The benchmark (Table~\ref{tab:results}) is a $3$-seed, patient-level evaluation
+on the abdomen window at 50 epochs; multi-anatomy runs and completion of the
+per-image (Table~\ref{tab:sweep-periimage}) and flow-vs-regression
+(Table~\ref{tab:flow-vs-reg}) sweeps remain in progress.  For the proposed
+self-supervised flow (Section~\ref{sec:method}) the four-step inference arm is
+still completing (ep.\,38--46), though its one- vs.\ multi-step trend is already
+unambiguous; the dedicated multi-seed one-step SSFlow head-to-head at matched
+pairing remains to be finalised.  The detectability evaluation
+(Section~\ref{sec:detect}) covers the deterministic denoisers on the $3$-seed
+benchmark; the generative SSFlow and CFM detectability---where fabrication, not
+just erosion, can arise---is in progress.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
