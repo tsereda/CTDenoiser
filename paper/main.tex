@@ -454,54 +454,15 @@ self-supervised method and the supervised upper bound quantifies the headroom
 for correlated-noise-aware self-supervision---the gap our self-supervised
 rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
-\paragraph{Per-fold stability and convergence.}
-The benchmark reports each regime as a $3$-seed mean; to confirm the ordering is
-stable \emph{per fold} and established early in training, we repeat the RED-CNN
-and DnCNN comparison on the same three folds at a reduced 15-epoch budget
-(Table~\ref{tab:cv}), reporting the gain over each fold's \emph{own} input floor
-($31.44/30.04/29.27$\,dB) averaged across folds ($\pm$ s.d.).  The ordering is
-preserved with a tight per-fold spread: supervised gains $+4.0$ to $+4.2$\,dB
-($\pm0.22$); Noise2Sim is again the only label-free method to clear the floor by
-a decisive margin ($+1.74\pm0.09$\,dB on RED-CNN); and Noise2Void, Filter2Noise,
-and ZS-N2N stay within noise of the input ($|\Delta\text{PSNR}|\le0.32$\,dB).
-Absolute PSNR at 15 epochs is already within $\sim$0.1\,dB of the 50-epoch
-benchmark (RED-CNN supervised $34.43$ vs.\ $34.50$\,dB), so the regime
-ordering---the paper's central claim---is established early and holds on every
-fold.
-
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{Three-fold patient-level cross-validation on TCIA LDCT (abdomen;
-           15 epochs).  $\Delta$PSNR and SSIM are the mean ($\pm$ s.d.) across
-           the three folds; the PSNR gain is measured against each fold's own
-           LDCT-input floor ($31.44/30.04/29.27$\,dB for folds $1/2/3$).  PSNR,
-           RMSE, and RSR are fold means.  Only DnCNN and RED-CNN completed
-           all three folds and are shown; U-Net had incomplete fold coverage at
-           export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
-           (single row each).  \textbf{Bold}: best per column.
-           \underline{Underline}: best \emph{label-free} PSNR gain.}
-  \label{tab:cv}
-  \begin{tabular}{llccccc}
-    \toprule
-    \textbf{Model} & \textbf{Supervision} &
-    $\Delta$PSNR\,$\uparrow$ (dB) & PSNR\,$\uparrow$ & SSIM\,$\uparrow$ &
-    RMSE\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Supervised & \textbf{+4.19 $\pm$ 0.22} & \textbf{34.43} & \textbf{0.927 $\pm$ 0.013} & \textbf{0.0195} & \textbf{0.0042} \\
-    DnCNN~\cite{zhang2017beyond}   & Supervised & +4.04 $\pm$ 0.22 & 34.29 & 0.924 $\pm$ 0.015 & 0.0199 & 0.0044 \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & \underline{+1.74 $\pm$ 0.09} & 31.99 & 0.900 $\pm$ 0.015 & 0.0261 & 0.0077 \\
-    DnCNN~\cite{zhang2017beyond}   & Noise2Sim~\cite{niu2020noise2sim} & +1.42 $\pm$ 0.28 & 31.66 & 0.895 $\pm$ 0.015 & 0.0271 & 0.0082 \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & +0.32 $\pm$ 0.10 & 30.57 & 0.883 $\pm$ 0.019 & 0.0306 & 0.0105 \\
-    DnCNN~\cite{zhang2017beyond}   & Noise2Void~\cite{krull2019noise2void} & $-0.02$ $\pm$ 0.06 & 30.23 & 0.875 $\pm$ 0.018 & 0.0320 & 0.0114 \\
-    \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & +0.26 $\pm$ 0.11 & 30.51 & 0.881 $\pm$ 0.016 & 0.0309 & 0.0105 \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $-0.09$ $\pm$ 0.20 & 30.16 & 0.879 $\pm$ 0.015 & 0.0319 & 0.0112 \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
+\paragraph{Per-fold stability.}
+The regime ordering holds fold-by-fold and is established early in training: a
+reduced 15-epoch replication on the same three folds
+(Appendix~\ref{app:supp-tables}, Table~\ref{tab:cv}) reproduces it---supervised
+$+4.0$ to $+4.2$\,dB, Noise2Sim the only label-free method clearing the floor
+($+1.74{\pm}0.09$\,dB on RED-CNN), and the rest within noise
+($|\Delta\text{PSNR}|\le0.32$\,dB)---with absolute PSNR already within
+$\sim$0.1\,dB of the 50-epoch benchmark (RED-CNN supervised $34.43$ vs.\
+$34.50$\,dB).
 
 \subsection{Task-based detectability}
 \label{sec:detect}
@@ -721,9 +682,9 @@ Table~\ref{tab:ssflow-steps} is the inference-steps ablation above
 explicit \emph{epoch} column because the four-step arm is still training;
 Table~\ref{tab:flow-vs-reg} (\texttt{sweep\_flow\_vs\_reg.yml}) is its regression
 control, holding the similarity pairing fixed and swapping the flow estimator for
-a direct Noise2Sim regressor to isolate \emph{why} SSFlow trails Noise2Sim; and
-Table~\ref{tab:sweep-periimage} (\texttt{sweep\_periimage.yml}) gives the
-per-image grid, cells (``---'') populated as that sweep finishes.
+a direct Noise2Sim regressor to isolate \emph{why} SSFlow trails Noise2Sim.  The
+per-image grid (\texttt{sweep\_periimage.yml}) is in Appendix~\ref{app:supp-tables},
+Table~\ref{tab:sweep-periimage}.
 
 \begin{table*}[t]
   \centering
@@ -815,30 +776,6 @@ per-image grid, cells (``---'') populated as that sweep finishes.
   \end{tabular}
 \end{table*}
 
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{\textbf{Per-image sweep} (\texttt{sweep\_periimage.yml}): test-time,
-           data-free methods, model-agnostic.  Values shown are single-split
-           seed-0 (floor $31.44$\,dB; $\Delta$ over that floor); the $3$-seed
-           means ($2$ modes $\times$ $3$ seeds) are pending and will match the
-           benchmark's $30.25$\,dB floor.  Both methods sit essentially at the
-           noisy floor---consistent with the label-free ordering in
-           Table~\ref{tab:results}.  $\uparrow$/$\downarrow$: higher/lower is
-           better.}
-  \label{tab:sweep-periimage}
-  \begin{tabular}{llrccccc}
-    \toprule
-    \textbf{Method} & \textbf{Type} & \textbf{Params} &
-    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & 31.58 \,(+0.14) & 0.896 & 0.0269 & 0.176 & 0.0076 \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & 31.17 \,($-0.27$) & 0.892 & 0.0281 & 0.182 & 0.0083 \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
 % -----------------------------------------------------------------------
 \section{Discussion}
 
@@ -906,6 +843,74 @@ benchmark.  Consistent with that observation, an ablation shows the one-step
 posterior mean is the operative estimator while multi-step refinement
 degrades fidelity.  All code is released to facilitate
 reproducibility.
+
+% -----------------------------------------------------------------------
+\appendix
+\section{Supplementary Tables}
+\label{app:supp-tables}
+
+Two supporting tables referenced from the main text: the reduced-budget
+cross-validation that confirms the per-fold stability of the benchmark ordering
+(Table~\ref{tab:cv}, Section~\ref{sec:results}) and the per-image, test-time
+methods (Table~\ref{tab:sweep-periimage}).
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{Three-fold patient-level cross-validation on TCIA LDCT (abdomen;
+           15 epochs).  $\Delta$PSNR and SSIM are the mean ($\pm$ s.d.) across
+           the three folds; the PSNR gain is measured against each fold's own
+           LDCT-input floor ($31.44/30.04/29.27$\,dB for folds $1/2/3$).  PSNR,
+           RMSE, and RSR are fold means.  Only DnCNN and RED-CNN completed
+           all three folds and are shown; U-Net had incomplete fold coverage at
+           export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
+           (single row each).  \textbf{Bold}: best per column.
+           \underline{Underline}: best \emph{label-free} PSNR gain.}
+  \label{tab:cv}
+  \begin{tabular}{llccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} &
+    $\Delta$PSNR\,$\uparrow$ (dB) & PSNR\,$\uparrow$ & SSIM\,$\uparrow$ &
+    RMSE\,$\downarrow$ & RSR\,$\downarrow$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Supervised & \textbf{+4.19 $\pm$ 0.22} & \textbf{34.43} & \textbf{0.927 $\pm$ 0.013} & \textbf{0.0195} & \textbf{0.0042} \\
+    DnCNN~\cite{zhang2017beyond}   & Supervised & +4.04 $\pm$ 0.22 & 34.29 & 0.924 $\pm$ 0.015 & 0.0199 & 0.0044 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & \underline{+1.74 $\pm$ 0.09} & 31.99 & 0.900 $\pm$ 0.015 & 0.0261 & 0.0077 \\
+    DnCNN~\cite{zhang2017beyond}   & Noise2Sim~\cite{niu2020noise2sim} & +1.42 $\pm$ 0.28 & 31.66 & 0.895 $\pm$ 0.015 & 0.0271 & 0.0082 \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & +0.32 $\pm$ 0.10 & 30.57 & 0.883 $\pm$ 0.019 & 0.0306 & 0.0105 \\
+    DnCNN~\cite{zhang2017beyond}   & Noise2Void~\cite{krull2019noise2void} & $-0.02$ $\pm$ 0.06 & 30.23 & 0.875 $\pm$ 0.018 & 0.0320 & 0.0114 \\
+    \midrule
+    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & +0.26 $\pm$ 0.11 & 30.51 & 0.881 $\pm$ 0.016 & 0.0309 & 0.0105 \\
+    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $-0.09$ $\pm$ 0.20 & 30.16 & 0.879 $\pm$ 0.015 & 0.0319 & 0.0112 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{\textbf{Per-image sweep} (\texttt{sweep\_periimage.yml}): test-time,
+           data-free methods, model-agnostic.  Values shown are single-split
+           seed-0 (floor $31.44$\,dB; $\Delta$ over that floor); the $3$-seed
+           means ($2$ modes $\times$ $3$ seeds) are pending and will match the
+           benchmark's $30.25$\,dB floor.  Both methods sit essentially at the
+           noisy floor---consistent with the label-free ordering in
+           Table~\ref{tab:results}.  $\uparrow$/$\downarrow$: higher/lower is
+           better.}
+  \label{tab:sweep-periimage}
+  \begin{tabular}{llrccccc}
+    \toprule
+    \textbf{Method} & \textbf{Type} & \textbf{Params} &
+    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
+    \midrule
+    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & 31.58 \,(+0.14) & 0.896 & 0.0269 & 0.176 & 0.0076 \\
+    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & 31.17 \,($-0.27$) & 0.892 & 0.0281 & 0.182 & 0.0083 \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
 
 % -----------------------------------------------------------------------
 \bibliographystyle{plain}
