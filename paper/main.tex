@@ -114,8 +114,10 @@ showing supervised denoisers gain $\sim$4\,dB over the noisy input while
 the only label-free method to reliably beat it is the correlated-noise-aware
 Noise2Sim (Section~\ref{sec:results}); (iii) the observation that an
 \emph{unconditional} rectified flow recovers the one-step Noise2Noise
-optimum without clean targets, together with its empirical instantiation
-SSFlow that targets the remaining gap (Section~\ref{sec:method}); and
+optimum without clean targets, \emph{and} a finite-step departure result proving
+that multi-step integration monotonically worsens it---so on noisy pairs the
+flow is dominated by direct regression, which our matched-pairing experiment
+confirms (Section~\ref{sec:method}); and
 (iv) a task-based, hallucination-aware detectability evaluation---a channelized
 Hotelling observer with a corrected noise-power spectrum---showing the
 benchmark's PSNR/SSIM gains do not translate into low-contrast lesion
@@ -679,6 +681,49 @@ inference, the one-step estimate is $\hat s = x + v_\theta(x,0)$, optionally
 refined with a few Euler steps of the learned ODE initialised at the noisy
 input; we do \emph{not} integrate to the noisy endpoint distribution.
 
+\paragraph{Multi-step refinement provably departs from the optimum.}
+The one-step readout is exact \emph{only} at $t{=}0$; integrating further
+provably increases denoising error, because the flow's terminal marginal is the
+\emph{noisy} law $p_1$, not the clean signal.  We make this precise in the
+tractable jointly-Gaussian model (per spectral mode: signal variance
+$\sigma_s^2$, independent noise variance $\sigma_n^2$ on each observation), where
+$v^\star$ is linear and the ODE $\dot z=v^\star(z,t)$ integrates in closed form to
+$\hat z(t)=x_0\sqrt{(\sigma_s^2+\gamma(t)\sigma_n^2)/(\sigma_s^2+\sigma_n^2)}$,
+with $\gamma(t)=(1-t)^2+t^2$.  The natural multi-step readout
+$z_t+(1-t)v^\star(z_t,t)=\mathbb{E}[x_1\mid z_t]$ (which at $t{=}0$ reduces to the
+one-step estimate) evaluated at the propagated point $\hat z(t)$ is the shrinkage
+denoiser $\hat s(t)=\kappa(t)\,x_0$ with
+\begin{equation}
+  \kappa(t)=\frac{\sigma_s^2+t\,\sigma_n^2}
+                 {\sqrt{(\sigma_s^2+\gamma(t)\sigma_n^2)\,(\sigma_s^2+\sigma_n^2)}}.
+  \label{eq:kappa}
+\end{equation}
+
+\emph{Proposition (finite-step departure).}  $\kappa$ is strictly increasing on
+$[0,1]$, from the Wiener/MMSE coefficient
+$\kappa(0)=\sigma_s^2/(\sigma_s^2+\sigma_n^2)$ to $\kappa(1)=1$ (the identity---no
+denoising); hence the denoising risk
+$R(t)=(\kappa(t)-1)^2\sigma_s^2+\kappa(t)^2\sigma_n^2$ is strictly increasing in
+$t$.  The one-step estimate ($t{=}0$) is therefore \emph{exactly} optimal, and each
+Euler step moves the estimate monotonically back toward the raw noisy input.
+
+\emph{Proof.}  Differentiating
+$\kappa(t)^2(\sigma_s^2+\sigma_n^2)=(\sigma_s^2+t\sigma_n^2)^2/(\sigma_s^2+\gamma(t)\sigma_n^2)$,
+the numerator of the derivative is
+$2\sigma_n^2(\sigma_s^2+t\sigma_n^2)(2\sigma_s^2+\sigma_n^2)(1-t)\ge0$, vanishing
+only at $t{=}1$, so $\kappa$ strictly increases; $R$ is convex in $\kappa$ with
+minimiser $\kappa(0)$, hence strictly increasing in $t$.\hfill$\square$
+
+Two consequences match the ablation.  \emph{(a) Refinement cannot help:} even the
+\emph{exact} continuous flow under-shrinks for every $t>0$, and Euler
+discretisation only compounds it, so multi-step is dominated by one-step at the
+population level---not merely empirically.  \emph{(b) A training paradox:} a
+\emph{better}-trained velocity integrates \emph{more} faithfully toward the noisy
+endpoint, so multi-step degrades \emph{as training proceeds}---exactly the
+counter-intuitive trend in Table~\ref{tab:ssflow-steps}.  The one-step posterior
+mean is thus the provably optimal readout on N2N pairs, and iteration is the
+flow's liability made precise.
+
 \paragraph{Ablation.}
 By \eqref{eq:ss-mmse}, the one-step estimate coincides with
 similarity-based Noise2Noise regression; the flow is justified only if
@@ -692,8 +737,10 @@ inverted-U in $r$, peaking at $r{=}2$ ($+1.39$\,dB, Table~\ref{tab:ssflow-steps}
 $r{=}1$---which excludes only the query pixel, recovering the Noise2Sim
 target---is $0.6$\,dB worse, confirming that matching \emph{beyond} the FBP
 correlation length is what helps.  \emph{(ii) Multi-step refinement does not
-help; it hurts.}  Four-step Euler inference is uniformly below one-step at
-matched training and \emph{degrades} as training proceeds, falling to $+0.52$,
+help; it hurts}---exactly as the finite-step departure of
+Eq.~\eqref{eq:kappa} predicts.  Four-step Euler inference is uniformly below
+one-step at matched training and \emph{degrades} as training proceeds (the
+training paradox of the Proposition), falling to $+0.52$,
 $+0.48$, and $+0.08$\,dB at $r{=}1,2,3$ (four-step runs ongoing, ep.\,39--48)
 versus $+0.77$, $+1.39$, $+0.85$ for one-step (ep.\,50).  The one-step
 posterior mean of \eqref{eq:ss-mmse}---not iterative sampling---is therefore
