@@ -155,7 +155,16 @@ sampling---a concern our self-supervised flow addresses by construction
 (Section~\ref{sec:method}).  More fundamentally, the perception--distortion
 trade-off~\cite{blau2018perception} establishes that minimising distortion
 necessarily costs perceptual realism for any distortion measure, the formal
-reason a generative denoiser can look realistic while being unfaithful.
+reason a generative denoiser can look realistic while being unfaithful.  A
+parallel line makes the link to denoising explicit: an optimally trained
+flow-matching velocity yields the one-step MMSE denoiser at each noise
+level~\cite{gagneux2025phases,albergo2023stochastic}, and
+posterior-mean-then-transport estimators
+(PMRF~\cite{ohayon2025pmrf}, InDI~\cite{delbracio2023indi}) separate the MMSE
+regression step from the generative transport---conceding that iteration buys
+perceptual realism, not distortion.  Section~\ref{sec:method} pushes this to the
+label-free regime and finds the transport is not merely optional but a liability
+for the denoising objective.
 
 \paragraph{Self-supervised and zero-shot denoisers.}
 When paired full-dose targets are unavailable, denoisers can be trained
@@ -182,8 +191,13 @@ the mechanism most correlated-noise blind-spot successors build on.  More
 recently, Filter2Noise~\cite{sun2025filter2noise} couples self-supervised
 single-image training with an interpretable attention-guided bilateral
 filter designed specifically for LDCT, and WIA-LD2ND~\cite{zhao2024wia}
-performs self-supervised LDCT denoising in the wavelet domain.  Our
-benchmark includes Noise2Void, ZS-N2N, and Filter2Noise as label-free
+performs self-supervised LDCT denoising in the wavelet domain.  A unifying view
+is Noise2Score~\cite{kim2021noise2score}: self-supervised denoising reduces to
+score estimation, and Tweedie's formula then returns the posterior mean
+$\mathbb{E}[s\mid x]$, placing Noise2Noise, Noise2Void, and SURE under one
+estimator---the same MMSE target our flow reaches in a single step
+(Section~\ref{sec:method}), but via score/Tweedie rather than the flow velocity.
+Our benchmark includes Noise2Void, ZS-N2N, and Filter2Noise as label-free
 baselines and adds Noise2Sim as the correlated-noise-aware extension.
 
 \paragraph{Task-based and hallucination-aware evaluation.}
@@ -620,6 +634,24 @@ nothing beyond $s$) and $\mathbb{E}[n_i\mid s]=0$.  A single velocity
 evaluation thus recovers the Noise2Noise~\cite{lehtinen2018noise2noise}
 optimum from noisy pairs alone.
 
+This composes two established facts in a setting where neither has been stated
+together: the flow-matching denoising identity---an optimally trained velocity
+yields the one-step MMSE estimator $\mathbb{E}[x_1\mid x_t]$ at each
+level~\cite{gagneux2025phases,albergo2023stochastic}---and the Noise2Noise
+conditional-mean identity~\cite{lehtinen2018noise2noise}.  Prior statements of
+the former assume a \emph{clean} target $x_1$; the label-free, symmetric
+two-noisy-realisation case ($\mathbb{E}[x_1\mid s]=\mathbb{E}[x_0\mid s]=s$) is
+the delta, and it is what makes the one-step map a \emph{self-supervised} MMSE
+denoiser.  The equivalence is specific to the $L_2$/velocity-MSE objective
+(whose minimiser is the conditional mean, not the median or mode) and to the
+\emph{restoration} objective---the opposite of the Ambient Diffusion
+regime~\cite{daras2023ambient}, where noisy-only training deliberately
+\emph{samples} the clean distribution rather than collapsing to its mean.  It is
+a population-level identity at the optimum; how far a finite-capacity,
+finite-step flow \emph{departs} from it is the empirical question
+Section~\ref{sec:ss-pairs} answers---and it departs by losing to direct
+regression.
+
 \paragraph{Why the flow must be unconditional.}
 If the network is additionally given $x_0$ (as in
 Eq.~\eqref{eq:cfm-loss}), then $(z_t,x_0,t)$ determines the target exactly,
@@ -681,7 +713,12 @@ label-free result in our benchmark---while the flow stays at $+0.9$--$1.4$\,dB
 transferable idea, and the rectified-flow machinery is a liability, not an asset:
 one-step regression on these pairs is the estimator of choice.  This is the
 label-free echo of the supervised U-Net-vs-CFM gap of
-Section~\ref{sec:results}---flow trailing regression in both regimes.
+Section~\ref{sec:results}---flow trailing regression in both regimes.  The scope
+of this claim is the \emph{distortion / task} criterion: consistent with matched-data
+CT benchmarks~\cite{eulig2024benchmark}, regression wins on PSNR/SSIM and---by
+Section~\ref{sec:detect}---loses nothing on detectability, but a generative flow
+can still win on perceptual or radiomic-feature metrics that reward texture over
+fidelity, which we do not claim to optimise.
 
 \subsection{Per-sweep result tables}
 \label{sec:sweep-tables}
@@ -980,6 +1017,39 @@ Y.~Lipman, R.~T.~Q. Chen, H.~Ben-Hamu, M.~Nickel, and M.~Le.
 M.~S. Albergo and E.~Vanden-Eijnden.
 \newblock Building normalizing flows with stochastic interpolants.
 \newblock In \emph{International Conference on Learning Representations}, 2023.
+
+\bibitem{gagneux2025phases}
+Q.~Gagneux, Q.~Bertrand, A.~Emonet, S.~Massias, et~al.
+\newblock The generation phases of flow matching: a denoising perspective.
+\newblock \emph{arXiv preprint arXiv:2510.24830}, 2025.
+
+\bibitem{albergo2023stochastic}
+M.~S. Albergo, N.~M. Boffi, and E.~Vanden-Eijnden.
+\newblock Stochastic interpolants: A unifying framework for flows and diffusions.
+\newblock \emph{arXiv preprint arXiv:2303.08797}, 2023.
+
+\bibitem{kim2021noise2score}
+K.~Kim and J.~C. Ye.
+\newblock {Noise2Score}: Tweedie's approach to self-supervised image denoising
+  without clean images.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2021.
+
+\bibitem{ohayon2025pmrf}
+G.~Ohayon, T.~Michaeli, and M.~Elad.
+\newblock Posterior-mean rectified flow: Towards minimum {MSE} photo-realistic
+  image restoration.
+\newblock In \emph{International Conference on Learning Representations}, 2025.
+
+\bibitem{delbracio2023indi}
+M.~Delbracio and P.~Milanfar.
+\newblock Inversion by direct iteration: An alternative to denoising diffusion
+  for image restoration.
+\newblock \emph{Transactions on Machine Learning Research}, 2023.
+
+\bibitem{daras2023ambient}
+G.~Daras, K.~Shah, Y.~Dagan, A.~Gollakota, A.~G. Dimakis, and A.~Klivans.
+\newblock Ambient diffusion: Learning clean distributions from corrupted data.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2023.
 
 \bibitem{liu2022flow}
 X.~Liu, C.~Gong, and Q.~Liu.
