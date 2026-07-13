@@ -753,10 +753,10 @@ best-validation-PSNR epoch.
 
 \emph{(iii) The pairing is the contribution; the flow is not.}  Holding the
 pairing fixed and swapping the estimator (Table~\ref{tab:flow-vs-reg}) isolates
-the objective: on the \emph{same} decorrelated pairs a direct regressor rises to
-$+2.00$\,dB at $r{=}2$---above standard Noise2Sim ($r{=}1$) and the best
-label-free result in our benchmark---while the flow stays at $+0.9$--$1.4$\,dB
-(early returns, $2$ of $3$ seeds).  So the decorrelated non-local pairing is the
+the objective: on the \emph{same} decorrelated pairs a direct regressor
+($3$ seeds) rises to $+1.99$\,dB at $r{=}2$---above standard Noise2Sim ($r{=}1$,
+$+1.77$) and the best label-free result in our benchmark---while the flow stays
+at $+0.9$--$1.4$\,dB.  So the decorrelated non-local pairing is the
 transferable idea, and the rectified-flow machinery is a liability, not an asset:
 one-step regression on these pairs is the estimator of choice.  This is the
 label-free echo of the supervised U-Net-vs-CFM gap of
@@ -832,14 +832,15 @@ Table~\ref{tab:sweep-periimage}.
            (\texttt{sweep\_hallucination.yml}).  Both sweep the exclude-radius
            $r\in\{1,2,3\}$ over $3$ seeds ($9$ runs each), so the two arms overlay
            cell-for-cell; the PSNR gain is over each split's own input floor.  The
-           decisive read is regression$(r)$ vs.\ flow$(r)$ at matched $r$.
-           \emph{Early returns} ($\ddagger$: regression $2$ of $3$ seeds finished)
-           give the \emph{flow-is-the-cost} verdict: the regressor \emph{rises} on
-           the decorrelated pairs ($+1.75\!\to\!+2.00$\,dB from $r{=}1$ to $r{=}2$,
-           lifting standard Noise2Sim), while the flow sits at $+0.9$--$1.4$\,dB on
-           the \emph{same} pairs---so the rectified-flow objective, not the pairing,
-           is what makes SSFlow trail.  The decorrelated-pairing regressor at
-           $r{=}2$ ($+2.00$\,dB) is the best label-free result in the benchmark.
+           decisive read is regression$(r)$ vs.\ flow$(r)$ at matched $r$, and the
+           regression arm ($3$ seeds, complete) gives the \emph{flow-is-the-cost}
+           verdict: the regressor follows an inverted-U in $r$, \emph{rising} on the
+           decorrelated pairs to $+1.99$\,dB at $r{=}2$
+           ($+1.77\!\to\!+1.99\!\to\!+1.87$ for $r{=}1/2/3$, lifting standard
+           Noise2Sim), while the flow sits at $+0.9$--$1.4$\,dB on the \emph{same}
+           pairs---so the rectified-flow objective, not the pairing, is what makes
+           SSFlow trail.  The decorrelated-pairing regressor at $r{=}2$
+           ($+1.99$\,dB) is the best label-free result in the benchmark.
            The fabrication $d'$ (from \texttt{--eval-detectability}) confirms
            neither estimator invents structure ($\approx$ input floor).
            $\dagger$: provisional
@@ -860,9 +861,9 @@ Table~\ref{tab:sweep-periimage}.
     \quad LDCT input & --- & 30.25 & 0.876 & 0.0320 & 0.174 & 0.0115 & 0.028 \\
     \midrule
     \multicolumn{8}{l}{\emph{Regression (Noise2Sim, RED-CNN) --- same pairs, direct MMSE}} \\
-    Regression & $1^{\ddagger}$ & 32.10 \,($+1.75{\pm}0.20$) & $0.900{\pm}0.021$ & $0.0258$ & $0.164$ & $0.0076$ & $0.031$ \\
-    Regression & $2^{\ddagger}$ & \textbf{32.35 \,($+2.00{\pm}0.13$)} & $0.904{\pm}0.021$ & $0.0250$ & $0.160$ & $0.0071$ & $0.033$ \\
-    Regression & $3$ & --- & --- & --- & --- & --- & --- \\
+    Regression & $1$ & 32.02 \,($+1.77{\pm}0.14$) & $0.900{\pm}0.015$ & $0.0260$ & $0.163$ & $0.0076$ & $0.029$ \\
+    Regression & $2$ & \textbf{32.24 \,($+1.99{\pm}0.09$)} & $0.904{\pm}0.015$ & $0.0253$ & $0.160$ & $0.0071$ & $0.030$ \\
+    Regression & $3$ & 32.12 \,($+1.87{\pm}0.11$) & $0.904{\pm}0.014$ & $0.0256$ & $0.162$ & $0.0072$ & $0.029$ \\
     \midrule
     \multicolumn{8}{l}{\emph{Flow (SSFlow) --- same pairs, rectified-flow objective; one-step unless marked}} \\
     Flow & $1$ & --- & --- & --- & --- & --- & --- \\
