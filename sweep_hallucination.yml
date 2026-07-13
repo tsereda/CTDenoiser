@@ -32,6 +32,16 @@ parameters:
   epochs:
     value: 50
 
+  # Match the throughput-tuned benchmark sweep: ssflow should not fall back
+  # to train.py's 8-worker default, which can oversubscribe the pod CPU budget
+  # and leave the GPU idle.
+  batch-size:
+    value: 32
+  num-workers:
+    value: 6
+  prefetch-factor:
+    value: 4
+
   seed:
     values:
       - 0
