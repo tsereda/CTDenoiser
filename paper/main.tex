@@ -795,11 +795,10 @@ The architecture\,$\times$\,supervision benchmark (\texttt{sweep.yml}) is the
 main results table, Table~\ref{tab:results} in Section~\ref{sec:results}; here we
 report the flow-specific and per-image grids that drive the method.
 Table~\ref{tab:ssflow-steps} is the inference-steps ablation above
-(\texttt{sweep\_hallucination.yml}), filled from the current export with an
-explicit \emph{epoch} column because the four-step arm is still training;
-Table~\ref{tab:flow-vs-reg} (\texttt{sweep\_flow\_vs\_reg.yml}) is its regression
-control, holding the similarity pairing fixed and swapping the flow estimator for
-a direct Noise2Sim regressor to isolate \emph{why} SSFlow trails Noise2Sim.  The
+(\texttt{sweep\_hallucination.yml}); Table~\ref{tab:flow-vs-reg}
+(\texttt{sweep\_flow\_vs\_reg.yml}) is its regression control, holding the
+similarity pairing fixed and swapping the flow estimator for a direct Noise2Sim
+regressor to isolate whether the flow or the pairing is what matters.  The
 per-image grid (\texttt{sweep\_periimage.yml}) is in Appendix~\ref{app:supp-tables},
 Table~\ref{tab:sweep-periimage}.
 
@@ -927,17 +926,17 @@ CT-denoising work report task-based $d'$ alongside the five metrics in
 Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
-The benchmark (Table~\ref{tab:results}) is a $3$-seed, patient-level evaluation
-on the abdomen window at 50 epochs; multi-anatomy runs and completion of the
-per-image (Table~\ref{tab:sweep-periimage}) and flow-vs-regression
-(Table~\ref{tab:flow-vs-reg}) sweeps remain in progress.  For the proposed
-self-supervised flow (Section~\ref{sec:method}) the four-step inference arm is
-still completing (ep.\,38--46), though its one- vs.\ multi-step trend is already
-unambiguous; the dedicated multi-seed one-step SSFlow head-to-head at matched
-pairing remains to be finalised.  The detectability evaluation
-(Section~\ref{sec:detect}) covers the deterministic denoisers on the $3$-seed
-benchmark; the generative SSFlow and CFM detectability---where fabrication, not
-just erosion, can arise---is in progress.
+The evaluation is $3$-seed and patient-level but on the abdomen window only;
+multi-anatomy runs (chest, head) are the primary remaining generalisation check.
+The per-image methods (ZS-N2N, Filter2Noise) are reported single-split
+(Appendix~\ref{app:supp-tables}); their $3$-seed and detectability numbers are
+omitted because each CHO realisation would retrain their per-image network
+thousands of times.  The finite-step departure result
+(Section~\ref{sec:ss-pairs}) is exact in the jointly-Gaussian model; a bound for
+the general finite-capacity, finite-step case is left open.  Detectability is
+reported for the deterministic denoisers and, through the fabrication-vs-steps
+pass, for the generative SSFlow; a broader hallucination analysis of generative
+CT denoisers is a natural extension.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
