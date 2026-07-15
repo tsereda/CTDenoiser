@@ -487,6 +487,25 @@ $34.50$\,dB).
 \subsection{Task-based detectability}
 \label{sec:detect}
 
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{figures/detectability.pdf}{%
+    \includegraphics[width=\textwidth]{figures/detectability.pdf}}{%
+    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/detectability.pdf}\\[2pt]
+      generate with \texttt{python scripts/figure\_detectability.py <sweep\_export.csv>}\vspace{2.2em}}}}
+  \caption{\textbf{Task-based detectability} on the benchmark CNNs (mean over $3$
+           architectures $\times$ $3$ seeds).  \emph{(a)} CHO detectability
+           preserved $d'_\text{den}/d'_\text{in}$ vs lesion contrast: the erosion
+           concentrates at the high-contrast operating point---precisely where
+           PSNR/SSIM report their largest, most confident gains.  \emph{(b)} The
+           denoised NPS radial centroid falls below the input (dashed)---the
+           low-frequency ``waxy'' texture---most for the supervised models.
+           \emph{(c)} Fabrication $d'$ stays at the signal-absent input floor
+           (dashed) for every regime: detectability is eroded \emph{without}
+           inventing structure.}
+  \label{fig:detect}
+\end{figure*}
+
 Pixel-fidelity gains need not be diagnostic gains.  We test this directly with
 a Channelized Hotelling Observer (CHO) on a signal-known-exactly /
 background-known-statistically (SKE/BKS) task.  No CT forward projector is
@@ -549,7 +568,8 @@ separately.
   \end{tabular}
 \end{table*}
 
-Table~\ref{tab:detect} shows four things.  \textbf{First}, the detectability
+Table~\ref{tab:detect} and Figure~\ref{fig:detect} show four things.
+\textbf{First}, the detectability
 \emph{headroom} is small: the clean reference exceeds the noisy input by only
 $\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
 lesions are nearly as detectable in the noisy image as in the noise-free one.
