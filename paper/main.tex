@@ -20,9 +20,9 @@
 }
 
 % -----------------------------------------------------------------------
-\title{\textbf{CTDenoiser}: When Fidelity Gains Erode Detectability\\
-       A Benchmark for Low-Dose CT Denoising Across Supervised
-       and Self-Supervised Regimes}
+\title{\textbf{One-Step Is Optimal}: Unconditional Rectified Flows are\\
+       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts\\
+       {\normalsize A Benchmark and Task-Based Detectability Study on Low-Dose CT}}
 
 \author{%
   Tim Sereda\\
@@ -36,39 +36,50 @@
 
 % -----------------------------------------------------------------------
 \begin{abstract}
-Low-dose computed tomography (LDCT) denoising must contend with structured,
-spatially correlated noise that ordinary blind-spot self-supervision is not
-designed to handle.  We present \textbf{CTDenoiser}, an open benchmark and
-unified data, training, and inference harness that evaluates five
-architectures---RED-CNN, DnCNN, U-Net, CTformer, and a Conditional Flow
-Matching (CFM) model---across the supervision regimes for which they are
-defined, from fully supervised training to similarity-based, blind-spot, and
-per-image self-supervision.  On the Mayo TCIA abdomen data, supervised models
-recover $\sim$4\,dB PSNR over the noisy input and finish within $0.3$\,dB of one
-another across CNN backbones, so the supervision signal matters more than the
-architecture.  Among label-free methods, only the correlated-noise-aware
-Noise2Sim reliably beats the noisy baseline while blind-spot Noise2Void is
-flat-to-negative---direct evidence that CT's correlated noise violates the
-pixel-independence assumption these methods rely on.  Motivated by the resulting
-gap, we prove that the velocity field of an \emph{unconditional} rectified flow,
-trained on two noisy observations of the same signal, recovers the Noise2Noise
-posterior mean in a \emph{single} step with no clean targets---and that any
-multi-step integration provably departs from it.  Both hold empirically: a
-matched-pairing experiment shows one-step flow ties direct regression while
-multi-step Euler integration monotonically erodes it, so the decorrelated
-\emph{pairing}, not the flow machinery, is the useful idea---a one-step regressor
-on those pairs is our best label-free result ($+1.99$\,dB) and iteration only
-hurts.  Finally, a task-based evaluation with a
-channelized Hotelling observer shows these fidelity gains do not translate into
-detectability: the same models that gain $\sim$4\,dB PSNR \emph{erode}
-low-contrast lesion detectability rather than improving it---without fabricating
-structure---a shift PSNR and SSIM do not register.  All code, model definitions,
-and data-loading utilities are released at
+Iterative and generative denoisers are increasingly deployed on the assumption
+that refining a sample over many steps beats a single regression pass.  We prove
+the opposite for \emph{label-free} denoising: an \emph{unconditional} rectified
+flow, trained on two noisy observations of the same signal (the Noise2Noise
+setting), recovers the one-step MMSE denoiser with no clean targets---and any
+multi-step integration \emph{provably departs} from it, because the flow's
+terminal marginal is the noisy law, not the clean signal.  A matched-pairing
+experiment confirms both halves: one-step flow ties a direct regressor while
+multi-step Euler integration monotonically erodes fidelity, without ever
+fabricating structure---so the decorrelated \emph{pairing}, not the flow
+machinery, is the useful idea (a one-step regressor on those pairs is our best
+label-free result, $+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an
+open benchmark evaluating five architectures across supervised, similarity- and
+blind-spot self-supervised, and per-image regimes on low-dose CT.  There the
+stakes are concrete: among label-free methods only the correlated-noise-aware
+Noise2Sim beats the noisy baseline while blind-spot Noise2Void is flat-to-negative
+(CT's correlated noise violates pixel-independence), and---by a task-based
+channelized Hotelling observer---the $\sim$4\,dB PSNR that supervised denoisers do
+gain \emph{erodes} low-contrast lesion detectability rather than improving it, a
+shift PSNR and SSIM miss.  All code, model definitions, and data-loading utilities
+are released at
 \href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
 \end{abstract}
 
 % -----------------------------------------------------------------------
 \section{Introduction}
+
+Iterative and generative denoisers---diffusion and flow-matching models---are
+increasingly deployed on the assumption that modelling the full distribution of
+clean images, and refining a sample over many steps, buys quality over a single
+regression pass.  We show that for \emph{label-free} denoising this assumption is
+provably counter-productive.  Trained on two independent noisy observations of the
+same signal (the Noise2Noise setting), an \emph{unconditional} rectified flow has
+a minimiser whose one-step readout is exactly the Noise2Noise MMSE denoiser---a
+direct regressor---and we prove that integrating the learned ODE for any positive
+time \emph{monotonically increases} denoising error, because the flow's terminal
+marginal is the noisy law, not the clean signal.  A matched-data, matched-backbone
+experiment confirms both halves: one-step flow ties a direct regressor, and
+multi-step Euler integration erodes it monotonically, without ever fabricating
+structure.  We establish this on low-dose computed tomography (CT), where the
+stakes are concrete---CT's spatially correlated reconstruction noise breaks the
+pixel-independence assumption behind blind-spot self-supervision, and a task-based
+observer shows the fidelity gains denoisers do achieve can \emph{erode} diagnostic
+detectability rather than improve it.
 
 Computed tomography (CT) is a cornerstone of modern medical imaging, but
 the ionising radiation dose required for high-quality scans poses a
@@ -111,21 +122,19 @@ We address this with CTDenoiser, a self-contained benchmark that:
         trade-offs of generative denoisers.
 \end{itemize}
 
-Our contributions are: (i) the harness and a corrected full-slice
-evaluation (Section~\ref{sec:inference}); (ii) a controlled comparison
-showing supervised denoisers gain $\sim$4\,dB over the noisy input while
-the only label-free method to reliably beat it is the correlated-noise-aware
-Noise2Sim (Section~\ref{sec:results}); (iii) the observation that an
-\emph{unconditional} rectified flow recovers the one-step Noise2Noise
-optimum without clean targets, \emph{and} a finite-step departure result proving
-that multi-step integration monotonically worsens it---both confirmed by a
-matched-pairing experiment in which one-step flow ties direct regression while
-iteration erodes it, so the decorrelated pairing, not the flow, is what helps
-(Section~\ref{sec:method}); and
-(iv) a task-based, hallucination-aware detectability evaluation---a channelized
-Hotelling observer with a corrected noise-power spectrum---showing the
-benchmark's PSNR/SSIM gains do not translate into low-contrast lesion
-detectability (Section~\ref{sec:detect}).
+Our contributions are: (i) a theoretical result---an unconditional rectified
+flow trained on Noise2Noise pairs recovers the one-step MMSE denoiser, together
+with a finite-step departure proposition proving multi-step integration
+monotonically worsens it (Section~\ref{sec:method}); (ii) a matched-data,
+matched-backbone experiment confirming both halves---one-step flow ties direct
+regression while iteration erodes it---on a reproducible five-architecture,
+five-regime LDCT benchmark with a corrected full-slice evaluation
+(Sections~\ref{sec:inference},~\ref{sec:results}), on which the only label-free
+method to reliably beat the noisy input is the correlated-noise-aware Noise2Sim;
+and (iii) a task-based, hallucination-aware detectability evaluation---a
+channelized Hotelling observer with a corrected noise-power spectrum---showing the
+benchmark's PSNR/SSIM gains \emph{erode} low-contrast lesion detectability without
+fabricating structure (Section~\ref{sec:detect}).
 
 % -----------------------------------------------------------------------
 \section{Related Work}
