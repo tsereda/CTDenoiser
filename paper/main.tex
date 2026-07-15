@@ -50,12 +50,15 @@ architecture.  Among label-free methods, only the correlated-noise-aware
 Noise2Sim reliably beats the noisy baseline while blind-spot Noise2Void is
 flat-to-negative---direct evidence that CT's correlated noise violates the
 pixel-independence assumption these methods rely on.  Motivated by the resulting
-$3$--$4$\,dB gap, we observe that the velocity field of an \emph{unconditional}
-rectified flow, trained on two noisy observations of the same signal, recovers
-the Noise2Noise posterior mean in a \emph{single} step with no clean targets.
-We instantiate this as SSFlow, pairing the flow with a similarity-based
-construction that decorrelates CT noise; it attains $+1.39$\,dB, the best
-label-free result in our benchmark.  Finally, a task-based evaluation with a
+gap, we prove that the velocity field of an \emph{unconditional} rectified flow,
+trained on two noisy observations of the same signal, recovers the Noise2Noise
+posterior mean in a \emph{single} step with no clean targets---and that any
+multi-step integration provably departs from it.  Both hold empirically: a
+matched-pairing experiment shows one-step flow ties direct regression while
+multi-step Euler integration monotonically erodes it, so the decorrelated
+\emph{pairing}, not the flow machinery, is the useful idea---a one-step regressor
+on those pairs is our best label-free result ($+1.99$\,dB) and iteration only
+hurts.  Finally, a task-based evaluation with a
 channelized Hotelling observer shows these fidelity gains do not translate into
 detectability: the same models that gain $\sim$4\,dB PSNR \emph{erode}
 low-contrast lesion detectability rather than improving it---without fabricating
@@ -115,9 +118,10 @@ the only label-free method to reliably beat it is the correlated-noise-aware
 Noise2Sim (Section~\ref{sec:results}); (iii) the observation that an
 \emph{unconditional} rectified flow recovers the one-step Noise2Noise
 optimum without clean targets, \emph{and} a finite-step departure result proving
-that multi-step integration monotonically worsens it---so on noisy pairs the
-flow is dominated by direct regression, which our matched-pairing experiment
-confirms (Section~\ref{sec:method}); and
+that multi-step integration monotonically worsens it---both confirmed by a
+matched-pairing experiment in which one-step flow ties direct regression while
+iteration erodes it, so the decorrelated pairing, not the flow, is what helps
+(Section~\ref{sec:method}); and
 (iv) a task-based, hallucination-aware detectability evaluation---a channelized
 Hotelling observer with a corrected noise-power spectrum---showing the
 benchmark's PSNR/SSIM gains do not translate into low-contrast lesion
@@ -465,8 +469,8 @@ and a simple convolutional inductive bias dominate the backbone.
 Noise2Sim consistently exceeds the noisy floor ($+1.7$ to $+1.8$\,dB), whereas
 blind-spot Noise2Void is flat-to-negative ($-0.06$\,dB on DnCNN); this is direct
 evidence that FBP-correlated CT noise violates the pixel-independence assumption
-these methods rely on.  \textbf{Third}, the $3$--$4$\,dB gap between the best
-self-supervised method and the supervised upper bound quantifies the headroom
+these methods rely on.  \textbf{Third}, a $\sim$2\,dB gap remains between the best
+label-free method and the supervised upper bound, quantifying the headroom
 for correlated-noise-aware self-supervision---the gap our self-supervised
 rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
@@ -583,21 +587,21 @@ a necessary complement to them, not an optional one.
 \section{An Unconditional Rectified Flow is a One-Step Noise2Noise Denoiser}
 \label{sec:method}
 
-The results above leave a $3$--$4$\,dB gap between the best label-free
-method and supervised training.  Our methodological contribution is an
-\emph{observation}: the velocity field of an \emph{unconditional} rectified
-flow, trained on two noisy observations of the same signal, has a minimiser
-that recovers the Noise2Noise posterior mean in a \emph{single} step
-(Section~\ref{sec:rf-n2n})---no clean targets, and no ODE integration
-required.  We then instantiate this observation as SSFlow, a denoiser
-designed for the correlated noise of FBP-reconstructed LDCT
+The results above leave a $\sim$2\,dB gap between the best label-free
+method and supervised training.  Our methodological contribution is a pair of
+results: the velocity field of an \emph{unconditional} rectified flow, trained on
+two noisy observations of the same signal, has a minimiser that recovers the
+Noise2Noise posterior mean in a \emph{single} step (Section~\ref{sec:rf-n2n})---no
+clean targets, no ODE integration---and any multi-step integration \emph{provably
+departs} from that optimum.  We instantiate the one-step result as SSFlow, a
+denoiser for the correlated noise of FBP-reconstructed LDCT
 (Section~\ref{sec:ss-pairs}): it pairs the unconditional flow with a
-\emph{similarity-based} construction of the noisy pairs that keeps the
-paired noise independent despite spatial correlation.  An ablation
-(Section~\ref{sec:ss-pairs}) confirms the consequence of the observation
-that one might not expect of a ``flow''---multi-step refinement does not
-help---so SSFlow is best read as the empirical realisation of the one-step
-result rather than as iterative sampling.
+\emph{similarity-based} construction of the noisy pairs that keeps the paired
+noise independent despite spatial correlation.  A matched-pairing ablation
+(Section~\ref{sec:ss-pairs}) confirms both results---one-step flow ties a direct
+regressor while multi-step refinement monotonically hurts---so SSFlow is best
+read as the empirical realisation of the one-step result, and the decorrelated
+pairing, not the flow, is what carries it.
 
 \subsection{Rectified flow as a Noise2Noise estimator}
 \label{sec:rf-n2n}
@@ -728,41 +732,39 @@ flow's liability made precise.
 By \eqref{eq:ss-mmse}, the one-step estimate coincides with
 similarity-based Noise2Noise regression; the flow is justified only if
 \emph{multi-step refinement improves the structured residual} that one-step
-MMSE leaves behind.  We isolate this on a $3{\times}2$ grid over the exclusion
-radius $r\in\{1,2,3\}$ and the number of inference steps $\{1,4\}$
-(Table~\ref{tab:ssflow-steps}), against
-direct Noise2Sim and the supervised upper bound.  Two findings emerge.
-\emph{(i) The decorrelated pairing is the active ingredient.}  PSNR follows an
-inverted-U in $r$, peaking at $r{=}2$ ($+1.39$\,dB, Table~\ref{tab:ssflow-steps});
-$r{=}1$---which excludes only the query pixel, recovering the Noise2Sim
-target---is $0.6$\,dB worse, confirming that matching \emph{beyond} the FBP
-correlation length is what helps.  \emph{(ii) Multi-step refinement does not
-help; it hurts}---exactly as the finite-step departure of
-Eq.~\eqref{eq:kappa} predicts.  Four-step Euler inference is uniformly below
-one-step at matched training and \emph{degrades} as training proceeds (the
-training paradox of the Proposition), falling to $+0.52$,
-$+0.48$, and $+0.08$\,dB at $r{=}1,2,3$ (four-step runs ongoing, ep.\,39--48)
-versus $+0.77$, $+1.39$, $+0.85$ for one-step (ep.\,50).  The one-step
-posterior mean of \eqref{eq:ss-mmse}---not iterative sampling---is therefore
-the operative estimator: a null multi-step effect that narrows the
-contribution to the correlated-noise-aware pairing, in line with
-``no-new-denoiser'' reports that stochastic sampling trades fidelity for
-texture.  Consistent with that trade, val PSNR peaks early and then declines
-while GMSD keeps improving, so we checkpoint and report the
-best-validation-PSNR epoch.
-
-\emph{(iii) The pairing is the contribution; the flow is not.}  Holding the
-pairing fixed and swapping the estimator (Table~\ref{tab:flow-vs-reg}) isolates
-the objective: on the \emph{same} decorrelated pairs a direct regressor
-($3$ seeds) rises to $+1.99$\,dB at $r{=}2$---above standard Noise2Sim ($r{=}1$,
-$+1.77$) and the best label-free result in our benchmark---while the flow stays
-at $+0.9$--$1.4$\,dB.  So the decorrelated non-local pairing is the
-transferable idea, and the rectified-flow machinery is a liability, not an asset:
-one-step regression on these pairs is the estimator of choice.  This is the
-label-free echo of the supervised U-Net-vs-CFM gap of
-Section~\ref{sec:results}---flow trailing regression in both regimes.  The scope
-of this claim is the \emph{distortion / task} criterion: consistent with matched-data
-CT benchmarks~\cite{eulig2024benchmark}, regression wins on PSNR/SSIM and---by
+MMSE leaves behind.  We isolate this over the exclusion radius $r\in\{1,2,3\}$
+and the inference-step count $\{1,4,8,20\}$ (Table~\ref{tab:ssflow-steps}), and
+against the direct regressor at matched pairing (Table~\ref{tab:flow-vs-reg}).
+Three findings emerge.
+\emph{(i) The decorrelated pairing is the active ingredient.}  PSNR follows a
+shallow inverted-U in $r$, peaking at $r{=}2$ ($+1.88$\,dB); $r{=}1$---which
+excludes only the query pixel, recovering the plain Noise2Sim target---is
+$0.13$\,dB lower and $r{=}3$ is $0.19$\,dB lower, confirming that matching
+\emph{just beyond} the FBP correlation length is what helps.
+\emph{(ii) Multi-step refinement does not help; it hurts}---exactly as the
+finite-step departure of Eq.~\eqref{eq:kappa} predicts.  PSNR falls
+\emph{monotonically} with the step count, from $+1.88$ (one-step) to $+0.93$,
+$+0.68$, $+0.52$\,dB at $4/8/20$ steps ($r{=}2$), with the same monotone decline
+at every $r$; consistent with the training paradox of the Proposition, val PSNR
+also peaks early and then declines while GMSD keeps improving, so we checkpoint at
+the best-validation-PSNR epoch.  The one-step posterior mean of
+\eqref{eq:ss-mmse}, not iterative sampling, is the operative estimator---in line
+with ``no-new-denoiser'' reports that stochastic sampling trades fidelity for
+texture.
+\emph{(iii) One-step flow matches regression; the pairing is the contribution.}
+Swapping the estimator on the \emph{same} pairs (Table~\ref{tab:flow-vs-reg})
+confirms the theorem empirically: at matched $r$ the one-step flow and the direct
+regressor agree to within $\le0.2$\,dB ($r{=}2$: $+1.88$ vs.\ $+1.99$), tracing
+the same inverted-U.  A small residual favours regression (the finite-capacity
+caveat of Section~\ref{sec:rf-n2n}), so the decorrelated-pairing \emph{one-step
+regressor} at $r{=}2$ ($+1.99$\,dB)---the best label-free result in our
+benchmark---is the estimator of choice: it ties the flow, needs no ODE
+integration, and iteration only hurts.  The transferable idea is the decorrelated
+non-local pairing, not the flow machinery; the same iteration penalty recurs in
+the supervised regime, where the multi-step CFM trails the MSE U-Net by
+$\sim$1\,dB (Section~\ref{sec:results}).  The scope of this claim is the
+\emph{distortion / task} criterion: consistent with matched-data CT
+benchmarks~\cite{eulig2024benchmark}, regression wins on PSNR/SSIM and---by
 Section~\ref{sec:detect}---loses nothing on detectability, but a generative flow
 can still win on perceptual or radiomic-feature metrics that reward texture over
 fidelity, which we do not claim to optimise.
@@ -786,34 +788,38 @@ Table~\ref{tab:sweep-periimage}.
   \small
   \caption{\textbf{SSFlow inference-steps ablation} (\texttt{sweep\_hallucination.yml}):
            one-step posterior mean vs.\ multi-step Euler refinement across the
-           decorrelation radius $r$, on TCIA LDCT (abdomen; seed 0).  \emph{In
-           progress}---the \textbf{Epoch} column reports each run's last logged
-           epoch: the one-step runs have reached $50$, the four-step arm is
-           still training ($39$--$48$), so the two blocks are not yet at matched
-           budget.  PSNR shows the gain over the \emph{LDCT input} floor in
-           parentheses.  The fabrication $d'$ column (generative hallucination
-           index from the \texttt{--eval-steps-sweep} detectability pass) is
-           pending in this export.  \textbf{Bold}: best one-step row per metric.
-           $\uparrow$/$\downarrow$: higher/lower is better.}
+           decorrelation radius $r$, on TCIA LDCT (abdomen; $3$ seeds, $50$
+           epochs).  PSNR gives the absolute value with the gain over the
+           $30.25$\,dB input floor.  \emph{PSNR degrades monotonically with the
+           step count} at every $r$---the $20$-step gain is roughly a third of the
+           one-step gain---exactly as the finite-step departure of
+           Eq.~\eqref{eq:kappa} predicts, while the fabrication $d'$ holds at the
+           input floor ($\approx$$0.028$) at \emph{every} step count: iteration
+           erodes fidelity without inventing structure.  \textbf{Bold}: best cell
+           (one-step, $r{=}2$).  $\uparrow$/$\downarrow$: higher/lower is better.}
   \label{tab:ssflow-steps}
-  \begin{tabular}{cclrccccc}
+  \begin{tabular}{ccrccccc}
     \toprule
-    \textbf{Steps} & \textbf{Radius $r$} & \textbf{Epoch} &
+    \textbf{Steps} & \textbf{Radius $r$} &
     PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
     GMSD\,$\downarrow$ & RSR\,$\downarrow$ & fab.\ $d'$\,$\downarrow$ \\
     \midrule
-    \multicolumn{9}{l}{\emph{Reference}} \\
-    \quad LDCT input & --- & --- & 31.44 & 0.893 & 0.0274 & 0.166 & 0.0079 & --- \\
+    \multicolumn{8}{l}{\emph{Reference}} \\
+    \quad LDCT input & --- & 30.25 & 0.876 & 0.0320 & 0.174 & 0.0115 & 0.028 \\
     \midrule
-    \multicolumn{9}{l}{\emph{One-step posterior mean}} \\
-    $1$ & $1$ & $50$ & 32.20 \,(+0.77) & 0.907 & 0.0249 & 0.183 & 0.0066 & --- \\
-    $1$ & $2$ & $50$ & \textbf{32.83} \,(+1.39) & \textbf{0.917} & \textbf{0.0231} & 0.186 & \textbf{0.0057} & --- \\
-    $1$ & $3$ & $50$ & 32.28 \,(+0.85) & 0.914 & 0.0246 & 0.189 & 0.0064 & --- \\
+    \multicolumn{8}{l}{\emph{One-step posterior mean}} \\
+    $1$ & $1$ & 32.00 \,(+1.75) & 0.899 & 0.0261 & 0.215 & 0.0077 & 0.030 \\
+    $1$ & $2$ & \textbf{32.12 \,(+1.88)} & \textbf{0.902} & \textbf{0.0256} & 0.213 & \textbf{0.0073} & 0.029 \\
+    $1$ & $3$ & 31.93 \,(+1.69) & 0.896 & 0.0261 & 0.240 & 0.0076 & 0.028 \\
     \midrule
-    \multicolumn{9}{l}{\emph{Four-step Euler (still training)}} \\
-    $4$ & $1$ & $39$ & 31.96 \,(+0.52) & 0.903 & 0.0257 & 0.176 & 0.0070 & --- \\
-    $4$ & $2$ & $44$ & 31.92 \,(+0.48) & 0.902 & 0.0257 & 0.192 & 0.0070 & --- \\
-    $4$ & $3$ & $48$ & 31.52 \,(+0.08) & 0.895 & 0.0268 & 0.195 & 0.0076 & --- \\
+    \multicolumn{8}{l}{\emph{Four-step Euler}} \\
+    $4$ & $1$ & 31.17 \,(+0.92) & 0.889 & 0.0288 & 0.206 & 0.0095 & 0.030 \\
+    $4$ & $2$ & 31.18 \,(+0.93) & 0.890 & 0.0287 & 0.204 & 0.0093 & 0.028 \\
+    $4$ & $3$ & 31.00 \,(+0.75) & 0.887 & 0.0292 & 0.229 & 0.0096 & 0.028 \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Eight-step / Twenty-step Euler}} \\
+    $8$ & $2$ & 30.93 \,(+0.68) & 0.887 & 0.0295 & 0.205 & 0.0099 & 0.028 \\
+    $20$ & $2$ & 30.77 \,(+0.52) & 0.885 & 0.0301 & 0.205 & 0.0103 & 0.028 \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -821,35 +827,27 @@ Table~\ref{tab:sweep-periimage}.
 \begin{table*}[t]
   \centering
   \small
-  \caption{\textbf{Flow-vs-regression control} (\texttt{sweep\_flow\_vs\_reg.yml}):
-           \emph{why} does SSFlow trail Noise2Sim when the one-step theorem
-           (Section~\ref{sec:rf-n2n}) says they share the MMSE target
-           $\mathbb{E}[s\mid x]$?  We hold the similarity pairing fixed and vary
-           only the estimator.  The \emph{regression} arm is a direct Noise2Sim
-           regressor (RED-CNN backbone, $1.85\mathrm{M}$ params, capacity-comparable
-           to SSFlow's $2.11\mathrm{M}$ velocity net) trained on SSFlow's exact
-           decorrelated pairs; the \emph{flow} arm is one-step SSFlow
-           (\texttt{sweep\_hallucination.yml}).  Both sweep the exclude-radius
-           $r\in\{1,2,3\}$ over $3$ seeds ($9$ runs each), so the two arms overlay
-           cell-for-cell; the PSNR gain is over each split's own input floor.  The
-           decisive read is regression$(r)$ vs.\ flow$(r)$ at matched $r$, and the
-           regression arm ($3$ seeds, complete) gives the \emph{flow-is-the-cost}
-           verdict: the regressor follows an inverted-U in $r$, \emph{rising} on the
-           decorrelated pairs to $+1.99$\,dB at $r{=}2$
-           ($+1.77\!\to\!+1.99\!\to\!+1.87$ for $r{=}1/2/3$, lifting standard
-           Noise2Sim), while the flow sits at $+0.9$--$1.4$\,dB on the \emph{same}
-           pairs---so the rectified-flow objective, not the pairing, is what makes
-           SSFlow trail.  The decorrelated-pairing regressor at $r{=}2$
-           ($+1.99$\,dB) is the best label-free result in the benchmark.
-           The fabrication $d'$ (from \texttt{--eval-detectability}) confirms
-           neither estimator invents structure ($\approx$ input floor).
-           $\dagger$: provisional
-           $r{=}2$ flow value carried from the main sweep's 3-seed
-           \texttt{flowmatching+n2sim} cell ($5$-step Euler eval, $2$ of $3$ seeds
-           finished; fabrication $d'$ at the input floor); it is the only
-           multi-seed SSFlow number to date but is \emph{multi-step}, so the
-           dedicated one-step arm replaces it.  $\uparrow$/$\downarrow$:
-           higher/lower is better.}
+  \caption{\textbf{Flow-vs-regression control} (\texttt{sweep\_flow\_vs\_reg.yml}
+           $+$ \texttt{sweep\_hallucination.yml}): does the one-step theorem
+           (Section~\ref{sec:rf-n2n}) hold empirically?  We fix the similarity
+           pairing and vary only the estimator.  The \emph{regression} arm is a
+           direct Noise2Sim regressor (RED-CNN, $1.85\mathrm{M}$ params,
+           capacity-comparable to SSFlow's $2.11\mathrm{M}$ velocity net); the
+           \emph{flow} arm is one-step SSFlow.  Both sweep $r\in\{1,2,3\}$ over $3$
+           seeds ($9$ runs each) on the identical pairs, so the arms overlay
+           cell-for-cell; PSNR gain is over each split's own input floor.  \emph{The
+           theorem holds:} at matched $r$ the one-step flow and the regressor agree
+           to within $\le0.2$\,dB (e.g.\ $r{=}2$: $+1.88$ vs.\ $+1.99$), both
+           tracing the same inverted-U that peaks at $r{=}2$---so the decorrelated
+           pairing, not the estimator, is what helps.  A small residual favours
+           regression (consistent with the finite-capacity caveat), so the
+           decorrelated-pairing \emph{one-step regressor} at $r{=}2$
+           ($+1.99$\,dB) is the best label-free result and the estimator of
+           choice; the large cost is \emph{iteration}, not the objective---multi-step
+           flow falls to $+0.5$\,dB (Table~\ref{tab:ssflow-steps}).  Fabrication
+           $d'$ confirms neither estimator invents structure ($\approx$ input
+           floor).  \textbf{Bold}: best cell.  $\uparrow$/$\downarrow$: higher/lower
+           is better.}
   \label{tab:flow-vs-reg}
   \begin{tabular}{lcrccccc}
     \toprule
@@ -865,10 +863,10 @@ Table~\ref{tab:sweep-periimage}.
     Regression & $2$ & \textbf{32.24 \,($+1.99{\pm}0.09$)} & $0.904{\pm}0.015$ & $0.0253$ & $0.160$ & $0.0071$ & $0.030$ \\
     Regression & $3$ & 32.12 \,($+1.87{\pm}0.11$) & $0.904{\pm}0.014$ & $0.0256$ & $0.162$ & $0.0072$ & $0.029$ \\
     \midrule
-    \multicolumn{8}{l}{\emph{Flow (SSFlow) --- same pairs, rectified-flow objective; one-step unless marked}} \\
-    Flow & $1$ & --- & --- & --- & --- & --- & --- \\
-    Flow & $2^{\dagger}$ & 31.27 \,($+0.92{\pm}0.03$) & $0.889{\pm}0.025$ & $0.0287$ & $0.187$ & $0.0097$ & $0.030$ \\
-    Flow & $3$ & --- & --- & --- & --- & --- & --- \\
+    \multicolumn{8}{l}{\emph{Flow (SSFlow, one-step) --- same pairs, rectified-flow objective}} \\
+    Flow & $1$ & 32.00 \,($+1.75{\pm}0.08$) & $0.899{\pm}0.013$ & $0.0261$ & $0.215$ & $0.0077$ & $0.030$ \\
+    Flow & $2$ & 32.12 \,($+1.88{\pm}0.13$) & $0.902{\pm}0.016$ & $0.0256$ & $0.213$ & $0.0073$ & $0.029$ \\
+    Flow & $3$ & 31.93 \,($+1.69{\pm}0.10$) & $0.896{\pm}0.011$ & $0.0261$ & $0.240$ & $0.0076$ & $0.028$ \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -930,16 +928,16 @@ corrected full-slice evaluation and two CT-appropriate metrics (GMSD,
 RSR).  Once the evaluation is corrected, supervised denoisers gain
 $\sim$4\,dB over the noisy input, and among label-free methods only the
 correlated-noise-aware Noise2Sim reliably beats it while blind-spot
-Noise2Void degrades---quantifying a $3$--$4$\,dB gap.  Our central
-methodological observation is that an \emph{unconditional} rectified flow,
-trained on two noisy observations of the same signal, recovers the
-Noise2Noise posterior mean in a single step without clean targets; we
-instantiate it as SSFlow with similarity-based pairs that decorrelate CT
-noise, and it attains $+1.39$\,dB, the best label-free result in the
-benchmark.  Consistent with that observation, an ablation shows the one-step
-posterior mean is the operative estimator while multi-step refinement
-degrades fidelity.  All code is released to facilitate
-reproducibility.
+Noise2Void degrades---leaving a $\sim$2\,dB gap to supervised.  Our central
+methodological contribution is a proof that an \emph{unconditional} rectified
+flow, trained on two noisy observations of the same signal, recovers the
+Noise2Noise posterior mean in a single step without clean targets, together with
+a finite-step departure result showing any multi-step integration provably
+worsens it.  A matched-pairing experiment confirms both: one-step flow ties a
+direct regressor while multi-step Euler integration monotonically erodes
+fidelity---so the decorrelated \emph{pairing}, not the flow machinery, is the
+useful idea, and a one-step regressor on those pairs is our best label-free
+result ($+1.99$\,dB).  All code is released to facilitate reproducibility.
 
 % -----------------------------------------------------------------------
 \appendix
