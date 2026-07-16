@@ -29,11 +29,11 @@ spec:
           image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
           resources:
             requests:
-              cpu: "4"
+              cpu: "8"
               memory: "16Gi"
               nvidia.com/a100: "1"
             limits:
-              cpu: "8"
+              cpu: "12"
               memory: "32Gi"
               nvidia.com/a100: "1"
           env:
@@ -46,6 +46,13 @@ spec:
               value: ctdenoiser-sweep
             - name: WANDB_ENTITY
               value: timgsereda
+            # GPU packing: each run uses only ~30% of an A100 (small models on
+            # 64px patches -> launch-bound). Run this many sweep agents per pod on
+            # the one shared GPU so the sweep holds far fewer A100s. 2 -> ~60%
+            # util at half the GPUs; set 1 for the old one-run-per-GPU behaviour,
+            # 3 if GPU memory (currently ~26%) and CPU allow.
+            - name: AGENTS_PER_GPU
+              value: "2"
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -72,7 +79,21 @@ spec:
               cd /workspace/ctdenoiser
               pip install -e .
 
-              wandb agent timgsereda/ctdenoiser-sweep/SWEEP_ID
+              # Pack N sweep agents onto this pod's single A100 (see AGENTS_PER_GPU).
+              # Each run is launch-bound at ~30% util, so several overlap well and
+              # the sweep needs far fewer GPUs -- freeing the shared pool. The h5
+              # copy / clone / install above happen once and are shared by all N.
+              N="${AGENTS_PER_GPU:-1}"
+              echo "launching $N sweep agent(s) on this GPU"
+              pids=""
+              for i in $(seq 1 "$N"); do
+                wandb agent timgsereda/ctdenoiser-sweep/SWEEP_ID &
+                pids="$pids $!"
+              done
+              # Exit non-zero if any agent fails, so the Job/backoff sees it.
+              rc=0
+              for p in $pids; do wait "$p" || rc=1; done
+              exit $rc
           command: ["/bin/bash", "-c"]
       volumes:
         - name: workspace
