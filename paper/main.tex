@@ -483,6 +483,22 @@ label-free method and the supervised upper bound, quantifying the headroom
 for correlated-noise-aware self-supervision---the gap our self-supervised
 rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{figures/qualitative.pdf}{%
+    \includegraphics[width=\textwidth]{figures/qualitative.pdf}}{%
+    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/qualitative.pdf}\\[2pt]
+      generate with \texttt{python scripts/figure\_qualitative.py {-}{-}h5 <cache> {-}{-}patient <id> {-}{-}slice <n> {-}{-}models ...}\vspace{2.2em}}}}
+  \caption{\textbf{Qualitative comparison} on a held-out abdomen slice (top: full
+           slice with the ROI boxed; bottom: $2\times$ ROI).  The supervised model
+           removes the most noise but imparts the blotchy, low-frequency
+           ``waxy'' texture that the NPS-centroid shift quantifies
+           (Section~\ref{sec:detect}); Noise2Sim preserves finer texture; and
+           multi-step SSFlow visibly drifts back toward the noisy input relative to
+           its one-step readout, as the departure result predicts.}
+  \label{fig:qual}
+\end{figure*}
+
 \paragraph{Per-fold stability.}
 The regime ordering holds fold-by-fold and is established early in training: a
 reduced 15-epoch replication on the same three folds
@@ -596,7 +612,8 @@ high-contrast operating point where PSNR and SSIM report their largest, most
 confident gains.  \textbf{Third}, the supervised models that win most on PSNR
 also shift the noise-power-spectrum centroid furthest toward low frequency
 ($0.112 \!\to\! 0.087$, a $22\%$ drop, vs.\ $0.112 \!\to\! 0.109$ for
-Noise2Void), the blotchy / ``waxy'' texture radiologists distrust.
+Noise2Void), the blotchy / ``waxy'' texture radiologists distrust and that is
+visible in the qualitative panel (Figure~\ref{fig:qual}).
 \textbf{Fourth}, the differences \emph{between} supervision regimes are not
 statistically resolved at this sample size: the preserved-detectability ratios
 at $160$\,HU ($0.934\,{\pm}\,0.033$ supervised, $0.919\,{\pm}\,0.030$
@@ -771,10 +788,10 @@ excludes only the query pixel, recovering the plain Noise2Sim target---is
 $0.13$\,dB lower and $r{=}3$ is $0.19$\,dB lower, confirming that matching
 \emph{just beyond} the FBP correlation length is what helps.
 \emph{(ii) Multi-step refinement does not help; it hurts}---exactly as the
-finite-step departure of Eq.~\eqref{eq:kappa} predicts.  PSNR falls
-\emph{monotonically} with the step count, from $+1.88$ (one-step) to $+0.93$,
-$+0.68$, $+0.52$\,dB at $4/8/20$ steps ($r{=}2$), with the same monotone decline
-at every $r$; consistent with the training paradox of the Proposition, val PSNR
+finite-step departure of Eq.~\eqref{eq:kappa} predicts (Figure~\ref{fig:steps}).
+PSNR falls \emph{monotonically} with the step count, from $+1.88$ (one-step) to
+$+0.93$, $+0.68$, $+0.52$\,dB at $4/8/20$ steps ($r{=}2$), with the same monotone
+decline at every $r$; consistent with the training paradox of the Proposition, val PSNR
 also peaks early and then declines while GMSD keeps improving, so we checkpoint at
 the best-validation-PSNR epoch.  The one-step posterior mean of
 \eqref{eq:ss-mmse}, not iterative sampling, is the operative estimator---in line
@@ -797,6 +814,24 @@ benchmarks~\cite{eulig2024benchmark}, regression wins on PSNR/SSIM and---by
 Section~\ref{sec:detect}---loses nothing on detectability, but a generative flow
 can still win on perceptual or radiomic-feature metrics that reward texture over
 fidelity, which we do not claim to optimise.
+
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{figures/steps_departure.pdf}{%
+    \includegraphics[width=\textwidth]{figures/steps_departure.pdf}}{%
+    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/steps\_departure.pdf}\\[2pt]
+      generate with \texttt{python scripts/figure\_steps.py <hallucination\_export.csv> {-}{-}regression-ref 1.99}\vspace{2.2em}}}}
+  \caption{\textbf{The finite-step departure, predicted and confirmed.}
+           \emph{(a)} In the jointly-Gaussian model the relative denoising risk
+           $R(t)/R(0)$ of the flow's readout rises monotonically with integration
+           time $t$ from the one-step optimum ($t{=}0$) --- iteration
+           \emph{provably} increases error (Eq.~\eqref{eq:kappa}).  \emph{(b)}
+           Empirically, PSNR gain falls monotonically with the Euler step count at
+           every decorrelation radius $r$ (\texttt{sweep\_hallucination.yml}, $3$
+           seeds); the one-step values sit at the matched-pairing one-step
+           regression baseline (dashed), which one-step flow ties.}
+  \label{fig:steps}
+\end{figure*}
 
 \subsection{Per-sweep result tables}
 \label{sec:sweep-tables}
