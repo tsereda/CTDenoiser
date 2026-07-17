@@ -53,6 +53,10 @@ spec:
             # 3 if GPU memory (currently ~26%) and CPU allow.
             - name: AGENTS_PER_GPU
               value: "2"
+            # utility capability injects the driver's nvidia-cuda-mps-control so
+            # MPS below can actually engage (compute alone does not).
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -78,6 +82,21 @@ spec:
               git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
               cd /workspace/ctdenoiser
               pip install -e .
+
+              # NVIDIA MPS: let the packed agents share the GPU's SMs *concurrently*
+              # rather than time-slicing (two launch-bound runs otherwise take turns
+              # and util stays flat). Best-effort: if the control binary isn't in the
+              # image/injection, log and fall back to plain time-slicing -- the sweep
+              # still runs, just without the util boost.
+              export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
+              export CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-mps-log
+              mkdir -p "$CUDA_MPS_PIPE_DIRECTORY" "$CUDA_MPS_LOG_DIRECTORY"
+              if command -v nvidia-cuda-mps-control >/dev/null 2>&1; then
+                nvidia-cuda-mps-control -d && echo "MPS daemon started (concurrent GPU sharing)" \
+                  || echo "MPS start failed; continuing time-sliced"
+              else
+                echo "nvidia-cuda-mps-control not found; continuing time-sliced (no MPS)"
+              fi
 
               # Pack N sweep agents onto this pod's single A100 (see AGENTS_PER_GPU).
               # Each run is launch-bound at ~30% util, so several overlap well and
