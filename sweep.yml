@@ -55,10 +55,13 @@ parameters:
   # model underfits relative to the old bs=4 runs.
   batch-size:
     value: 32
-  # Worker processes staging patches ahead of the GPU. Kept below the pod's CPU
-  # limit (8) so the main training process is not starved.
+  # Worker processes staging patches ahead of the GPU. With --mmap-cache a
+  # worker's job is a page-cache memcpy + 64px crop, so 4 is ample, and at
+  # AGENTS_PER_GPU=3 the pod runs 3 x (1 main + 4 workers) against its 8-CPU
+  # request -- 6 workers/agent oversubscribed the pod and starved the mains
+  # (the CPU>100%-of-request / GPU<30% kill signature).
   num-workers:
-    value: 6
+    value: 4
   prefetch-factor:
     value: 4
 
@@ -100,6 +103,9 @@ command:
   - ctdenoiser.train
   - ${args}
   - --h5-path=/workspace/data.h5
+  # Memory-map the dataset from unpacked .npy (one shared page-cache copy per
+  # pod) instead of a private in-RAM copy per agent; see k8s/tr_job_template.yml.
+  - --mmap-cache=/workspace/npy_cache
   - --wandb-project=ctdenoiser-sweep
   # Task-based detectability (CHO d' + corrected NPS) run once on the best model
   # at the end of each run -> logged as det/* (+ det/c{hu}/* contrast-detail

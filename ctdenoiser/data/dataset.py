@@ -111,15 +111,21 @@ class _PairedCTBase(Dataset):
 
     def __getitem__(self, idx):
         pid, i = self.samples[idx]
-        low = torch.from_numpy(self.low_volumes[pid][i]).unsqueeze(0)
-        full = torch.from_numpy(self.full_volumes[pid][i]).unsqueeze(0)
+        low_np = self.low_volumes[pid][i]
+        full_np = self.full_volumes[pid][i]
         if self.train and self.patch_size:
-            _, h, w = low.shape
+            h, w = low_np.shape
             if h > self.patch_size and w > self.patch_size:
                 y = random.randint(0, h - self.patch_size)
                 x = random.randint(0, w - self.patch_size)
-                low = low[:, y : y + self.patch_size, x : x + self.patch_size]
-                full = full[:, y : y + self.patch_size, x : x + self.patch_size]
+                low_np = low_np[y : y + self.patch_size, x : x + self.patch_size]
+                full_np = full_np[y : y + self.patch_size, x : x + self.patch_size]
+        # Copy out of the backing store: the volumes may be read-only memmaps
+        # (mmap_cache mode), which torch.from_numpy cannot safely wrap. The
+        # copy is the crop only (64x64 in training), and a writable tensor is
+        # required downstream by pin_memory / in-place ops anyway.
+        low = torch.from_numpy(np.array(low_np)).unsqueeze(0)
+        full = torch.from_numpy(np.array(full_np)).unsqueeze(0)
         return low, full
 
     @staticmethod
@@ -203,34 +209,91 @@ class DICOMCTDataset(_PairedCTBase):
         return cls._split(patients, val_fraction, seed)
 
 
+def unpack_h5_to_npy(h5_path, cache_dir):
+    """Unpack an HDF5 cache into per-patient ``.npy`` files for memory-mapping.
+
+    Writes ``{cache_dir}/{pid}.{low,full}.npy`` for every patient in the cache.
+    Idempotent and safe under concurrent callers: existing files are kept, and
+    each file is written to a per-process temp name and moved into place with an
+    atomic ``os.replace``, so a reader never sees a truncated array and racing
+    unpackers merely do redundant work.
+
+    Why: the gzip-chunked HDF5 cannot be memory-mapped, so every training
+    process that eager-loads it holds a private full copy of the dataset in
+    RAM. With several sweep agents packed onto one GPU (one pod), those copies
+    multiply and push the pod past its memory request (the eviction/kill
+    symptom). Plain ``.npy`` files loaded with ``mmap_mode="r"`` share a single
+    page-cache copy across every agent and DataLoader worker in the pod.
+    """
+    import os
+
+    cache_dir = str(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
+    with open_h5(h5_path, "r") as f:
+        for pid in sorted(f["patients"].keys()):
+            for arm in ("low", "full"):
+                dst = os.path.join(cache_dir, f"{pid}.{arm}.npy")
+                if os.path.exists(dst):
+                    continue
+                tmp = f"{dst}.tmp.{os.getpid()}"
+                with open(tmp, "wb") as out:
+                    np.save(out, f[f"patients/{pid}/{arm}"][:])
+                os.replace(tmp, dst)
+    return cache_dir
+
+
 class HDF5CTDataset(_PairedCTBase):
     """Reads paired low/full dose CT from a preprocessed HDF5 file.
 
     The HDF5 file should contain ``/patients/{id}/low`` and
     ``/patients/{id}/full`` datasets (float32, already normalised to [0, 1]).
     Use ``scripts/convert_dicom_to_h5.py`` to create one from DICOM data.
+
+    With ``mmap_cache`` set, the file is first unpacked (once, idempotently)
+    into per-patient ``.npy`` files under that directory and the volumes are
+    memory-mapped instead of copied into process RAM. All processes on the
+    node then share one page-cache copy of the data -- essential when several
+    sweep agents run in one pod, where eager per-process copies exceed the
+    pod's memory request and get it evicted.
     """
 
-    def __init__(self, h5_path, patients, patch_size=64, train=True):
+    def __init__(self, h5_path, patients, patch_size=64, train=True,
+                 mmap_cache=None):
         self.patch_size = patch_size
         self.train = train
         self.low_volumes: dict[str, np.ndarray] = {}
         self.full_volumes: dict[str, np.ndarray] = {}
         self.samples: list[tuple[str, int]] = []
 
-        with open_h5(h5_path, "r") as f:
+        if mmap_cache:
+            import os
+
+            cache_dir = unpack_h5_to_npy(h5_path, mmap_cache)
             for pid in patients:
-                grp = f[f"patients/{pid}"]
-                low_vol = grp["low"][:]
-                full_vol = grp["full"][:]
-
-                pair_noise_stats(pid, low_vol, full_vol)
-
-                n_slices = low_vol.shape[0]
+                low_vol = np.load(
+                    os.path.join(cache_dir, f"{pid}.low.npy"), mmap_mode="r"
+                )
+                full_vol = np.load(
+                    os.path.join(cache_dir, f"{pid}.full.npy"), mmap_mode="r"
+                )
                 self.low_volumes[pid] = low_vol
                 self.full_volumes[pid] = full_vol
-                for i in range(n_slices):
+                for i in range(low_vol.shape[0]):
                     self.samples.append((pid, i))
+        else:
+            with open_h5(h5_path, "r") as f:
+                for pid in patients:
+                    grp = f[f"patients/{pid}"]
+                    low_vol = grp["low"][:]
+                    full_vol = grp["full"][:]
+
+                    pair_noise_stats(pid, low_vol, full_vol)
+
+                    n_slices = low_vol.shape[0]
+                    self.low_volumes[pid] = low_vol
+                    self.full_volumes[pid] = full_vol
+                    for i in range(n_slices):
+                        self.samples.append((pid, i))
 
         if not self.samples:
             raise ValueError(f"No slices for patients {patients} in {h5_path}")

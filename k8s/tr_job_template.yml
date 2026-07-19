@@ -21,8 +21,6 @@ spec:
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
-        - key: nvidia.com/gpu
-          operator: Exists
           effect: PreferNoSchedule
       containers:
         - name: sweep-agent
@@ -47,12 +45,25 @@ spec:
             - name: WANDB_ENTITY
               value: timgsereda
             # GPU packing: each run uses only ~30% of an A100 (small models on
-            # 64px patches -> launch-bound). Run this many sweep agents per pod on
-            # the one shared GPU so the sweep holds far fewer A100s. 2 -> ~60%
-            # util at half the GPUs; set 1 for the old one-run-per-GPU behaviour,
-            # 3 if GPU memory (currently ~26%) and CPU allow.
+            # 64px patches -> launch-bound). Run this many sweep agents per pod
+            # on the one shared GPU so combined utilisation clears the cluster's
+            # low-GPU-util kill threshold. 3 is safe now that the dataset is
+            # memory-mapped (--mmap-cache: one shared page-cache copy instead of
+            # a private ~GBs copy per agent) -- memory was the cap at 2.
             - name: AGENTS_PER_GPU
-              value: "2"
+              value: "3"
+            # PyTorch sizes its intra-op thread pool from the HOST's core count
+            # (Nautilus nodes: 64-128 cores), not the pod's 8-CPU request. Each
+            # agent + its DataLoader workers then spawns dozens of OpenMP/MKL
+            # threads that thrash against the cgroup quota: CPU lands >100% of
+            # request (a kill-policy violation) while the GPU starves behind the
+            # slowed Python launch loop. GPU work is unaffected by these caps.
+            - name: OMP_NUM_THREADS
+              value: "1"
+            - name: MKL_NUM_THREADS
+              value: "1"
+            - name: OPENBLAS_NUM_THREADS
+              value: "1"
             # utility capability injects the driver's nvidia-cuda-mps-control so
             # MPS below can actually engage (compute alone does not).
             - name: NVIDIA_DRIVER_CAPABILITIES
@@ -82,6 +93,24 @@ spec:
               git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
               cd /workspace/ctdenoiser
               pip install -e .
+
+              # Unpack the gzip-chunked h5 into mmap-able per-patient .npy files
+              # ONCE, before the agents start: every agent + DataLoader worker
+              # then shares a single page-cache copy of the dataset instead of
+              # each holding a private full copy in RAM (the >100%-of-request
+              # memory profile that got pods evicted). Matches the sweeps'
+              # --mmap-cache=/workspace/npy_cache flag; the unpack is idempotent
+              # so an agent racing ahead of it is still safe.
+              python -c "from ctdenoiser.data.dataset import unpack_h5_to_npy; unpack_h5_to_npy('/workspace/data.h5', '/workspace/npy_cache')"
+
+              # Periodic GPU/CPU telemetry in the pod log, so a util dip is
+              # diagnosable from `kubectl logs` after the fact (was blind before:
+              # packing+MPS shipped with no way to see whether util moved).
+              ( while true; do
+                  nvidia-smi --query-gpu=utilization.gpu,utilization.memory,memory.used --format=csv,noheader 2>/dev/null \
+                    | sed "s/^/[gpu-util $(date -u +%H:%M:%S)] /"
+                  sleep 300
+                done ) &
 
               # NVIDIA MPS: let the packed agents share the GPU's SMs *concurrently*
               # rather than time-slicing (two launch-bound runs otherwise take turns
