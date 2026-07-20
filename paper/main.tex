@@ -51,19 +51,19 @@ that refining a sample over many steps beats a single regression pass.  We prove
 the opposite for \emph{label-free} denoising.  An \emph{unconditional} rectified
 flow, trained on two noisy observations of the same signal (the Noise2Noise
 setting), has a minimiser whose one-step readout is exactly the MMSE
-denoiser---recovered with no clean targets---and any multi-step integration
+denoiser, recovered with no clean targets, and any multi-step integration
 \emph{provably departs} from it, because the flow's terminal marginal is the
 noisy law, not the clean signal.  A matched-pairing experiment confirms both
 halves: one-step flow ties a direct regressor, while multi-step Euler
 integration monotonically erodes fidelity, without ever fabricating structure.
 The useful ingredient is therefore the decorrelated \emph{pairing}, not the flow
-machinery---a one-step regressor on those pairs is our best label-free result
+machinery: a one-step regressor on those pairs is our best label-free result
 ($+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an open benchmark
 evaluating five architectures across supervised, similarity- and blind-spot
 self-supervised, and per-image regimes on low-dose CT, where the stakes are
 concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
 beats the noisy baseline, while blind-spot Noise2Void is
-flat-to-negative---CT's spatially correlated noise violates the
+flat-to-negative, because CT's spatially correlated noise violates the
 pixel-independence these methods assume.  And under a task-based channelized
 Hotelling observer, the $\sim$4\,dB PSNR that supervised denoisers do gain
 \emph{erodes} low-contrast lesion detectability rather than improving it, a shift
@@ -74,20 +74,20 @@ be released openly (repository link withheld for anonymous review).
 % -----------------------------------------------------------------------
 \section{Introduction}
 
-Iterative and generative denoisers---diffusion and flow-matching models---are
+Iterative and generative denoisers, such as diffusion and flow-matching models, are
 increasingly deployed on the assumption that modelling the full distribution of
 clean images, and refining a sample over many steps, buys quality over a single
 regression pass.  We show that for \emph{label-free} denoising this assumption is
 provably counter-productive.  Trained on two independent noisy observations of the
 same signal (the Noise2Noise setting), an \emph{unconditional} rectified flow has
-a minimiser whose one-step readout is exactly the Noise2Noise MMSE denoiser---a
-direct regressor---and we prove that integrating the learned ODE for any positive
+a minimiser whose one-step readout is exactly the Noise2Noise MMSE denoiser (a
+direct regressor), and we prove that integrating the learned ODE for any positive
 time \emph{monotonically increases} denoising error, because the flow's terminal
 marginal is the noisy law, not the clean signal.  A matched-data, matched-backbone
 experiment confirms both halves: one-step flow ties a direct regressor, and
 multi-step Euler integration erodes it monotonically, without ever fabricating
 structure.  We establish this on low-dose computed tomography (CT), where the
-stakes are concrete---CT's spatially correlated reconstruction noise breaks the
+stakes are concrete: CT's spatially correlated reconstruction noise breaks the
 pixel-independence assumption behind blind-spot self-supervision, and a task-based
 observer shows the fidelity gains denoisers do achieve can \emph{erode} diagnostic
 detectability rather than improve it.
@@ -1002,14 +1002,14 @@ corrected full-slice evaluation and two CT-appropriate metrics (GMSD,
 RSR).  Once the evaluation is corrected, supervised denoisers gain
 $\sim$4\,dB over the noisy input, and among label-free methods only the
 correlated-noise-aware Noise2Sim reliably beats it while blind-spot
-Noise2Void degrades---leaving a $\sim$2\,dB gap to supervised.  Our central
+Noise2Void degrades, leaving a $\sim$2\,dB gap to supervised.  Our central
 methodological contribution is a proof that an \emph{unconditional} rectified
 flow, trained on two noisy observations of the same signal, recovers the
 Noise2Noise posterior mean in a single step without clean targets, together with
 a finite-step departure result showing any multi-step integration provably
 worsens it.  A matched-pairing experiment confirms both: one-step flow ties a
 direct regressor while multi-step Euler integration monotonically erodes
-fidelity---so the decorrelated \emph{pairing}, not the flow machinery, is the
+fidelity, so the decorrelated \emph{pairing}, not the flow machinery, is the
 useful idea, and a one-step regressor on those pairs is our best label-free
 result ($+1.99$\,dB).  All code is released to facilitate reproducibility.
 
