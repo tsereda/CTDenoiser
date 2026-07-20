@@ -62,6 +62,8 @@ command:
   - ctdenoiser.train
   - ${args}
   - --h5-path=/workspace/data.h5
+  # One shared page-cache copy of the dataset per pod (see k8s/tr_job_template.yml).
+  - --mmap-cache=/workspace/npy_cache
   - --wandb-project=ctdenoiser-sweep
   # Task-based detectability (CHO d' + corrected NPS + fabrication index), same
   # as the main sweep so the per-image rows share the det/* columns. store_true

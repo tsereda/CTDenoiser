@@ -37,8 +37,10 @@ parameters:
   # and leave the GPU idle.
   batch-size:
     value: 32
+  # 4 workers/agent: with --mmap-cache a worker is a page-cache memcpy + crop,
+  # and AGENTS_PER_GPU=3 must fit the pod's 8-CPU request (see sweep.yml).
   num-workers:
-    value: 6
+    value: 4
   prefetch-factor:
     value: 4
 
@@ -81,6 +83,8 @@ command:
   - ctdenoiser.train
   - ${args}
   - --h5-path=/workspace/data.h5
+  # One shared page-cache copy of the dataset per pod (see k8s/tr_job_template.yml).
+  - --mmap-cache=/workspace/npy_cache
   - --wandb-project=ctdenoiser-sweep
   - --eval-detectability
   # More slices than the default keep the CHO covariance (and d') stable; the

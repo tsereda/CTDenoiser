@@ -165,10 +165,12 @@ def build_loaders(args):
             f"({train_p[:3]}... | {val_p})"
         )
         train_ds = HDF5CTDataset(
-            args.h5_path, train_p, patch_size=args.patch_size, train=True
+            args.h5_path, train_p, patch_size=args.patch_size, train=True,
+            mmap_cache=args.mmap_cache,
         )
         val_ds = HDF5CTDataset(
-            args.h5_path, val_p, patch_size=args.patch_size, train=False
+            args.h5_path, val_p, patch_size=args.patch_size, train=False,
+            mmap_cache=args.mmap_cache,
         )
         train_loader = _train_loader(train_ds, args)
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
@@ -500,6 +502,14 @@ def main(argv=None):
                         help="dir of DICOM series subdirs (SeriesInstanceUID)")
     parser.add_argument("--h5-path", type=str, default=None,
                         help="preprocessed HDF5 file (see scripts/convert_dicom_to_h5.py)")
+    parser.add_argument("--mmap-cache", type=str, default=None, metavar="DIR",
+                        help="unpack the HDF5 cache into per-patient .npy files "
+                             "under DIR (once, idempotently) and memory-map them "
+                             "instead of loading the dataset into process RAM. "
+                             "All training processes on the node share one "
+                             "page-cache copy -- required when packing several "
+                             "sweep agents into one pod, where eager per-process "
+                             "copies blow the pod's memory request.")
     parser.add_argument("--anatomy", choices=sorted(ANATOMY_WINDOWS),
                         default="abdomen",
                         help="HU window preset for --dicom-root normalisation: "
