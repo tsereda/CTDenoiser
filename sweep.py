@@ -157,25 +157,26 @@ def generate_indexed_job(sweep_id, entity, project, num_agents=4,
 
     container = job_yaml['spec']['template']['spec']['containers'][0]
 
-    wandb_command = f"wandb agent {entity}/{project}/{sweep_id}"
-    container['args'][0] = f"""set -e
-
-apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
-pip install wandb matplotlib h5py
-
-# Copy preprocessed HDF5 from PVC to local emptyDir for fast I/O
-echo "Copying preprocessed data ({h5_name})..."
-t0=$(date +%s)
-cp /data/{h5_name} /workspace/data.h5
-echo "Copy done: $(du -h /workspace/data.h5 | cut -f1) in $(($(date +%s) - t0))s"
-
-git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
-cd /workspace/ctdenoiser
-pip install -e .
-
-{wandb_command}
-"""
+    # Substitute into the template's args script rather than replacing it. The
+    # template carries the per-pod setup that actually raises GPU utilisation --
+    # the .npy mmap unpack, the AGENTS_PER_GPU packing loop, MPS, and the
+    # nvidia-smi util logger. A wholesale rewrite here (the previous behaviour)
+    # silently dropped all of it, so packing/MPS never took effect at deploy
+    # time and every pod ran one agent at ~30% util. Only the cache filename and
+    # the wandb sweep target are parameterised.
+    script = container['args'][0]
+    h5_placeholder = 'ldct_preprocessed.h5'
+    sweep_placeholder = f'{DEFAULT_ENTITY}/{DEFAULT_PROJECT}/SWEEP_ID'
+    if h5_placeholder not in script or sweep_placeholder not in script:
+        print(
+            f"Error: template {TEMPLATE_PATH} is missing an expected placeholder "
+            f"('{h5_placeholder}' and/or '{sweep_placeholder}'). Refusing to "
+            f"deploy a half-substituted job."
+        )
+        sys.exit(1)
+    script = script.replace(h5_placeholder, h5_name)
+    script = script.replace(sweep_placeholder, f"{entity}/{project}/{sweep_id}")
+    container['args'][0] = script
 
     for env_var in container['env']:
         if env_var['name'] == 'WANDB_PROJECT':
