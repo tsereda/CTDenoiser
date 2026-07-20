@@ -1,34 +1,44 @@
-\documentclass[10pt,twocolumn]{article}
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+% Anonymous-submission mode; for the camera-ready, drop the [submission]
+% option and restore the author block below.
+\usepackage[submission]{aaai2026}
+\usepackage{times}          % DO NOT CHANGE THIS
+\usepackage{helvet}         % DO NOT CHANGE THIS
+\usepackage{courier}        % DO NOT CHANGE THIS
+\usepackage[hyphens]{url}   % DO NOT CHANGE THIS
+\usepackage{graphicx}       % DO NOT CHANGE THIS
+\urlstyle{rm}               % DO NOT CHANGE THIS
+\def\UrlFont{\rm}           % DO NOT CHANGE THIS
+\usepackage{caption}        % DO NOT CHANGE THIS
+\frenchspacing              % DO NOT CHANGE THIS
+\setlength{\pdfpagewidth}{8.5in}  % DO NOT CHANGE THIS
+\setlength{\pdfpageheight}{11in}  % DO NOT CHANGE THIS
 
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsthm}
-\usepackage{graphicx}
+% Paper-specific packages (none on the AAAI disallowed list).
+\usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage{xcolor}
-\usepackage{microtype}
-\usepackage{algorithm}
-\usepackage{algpseudocode}
 \usepackage{multirow}
-\usepackage{bbm}
+\usepackage{microtype}
 
-\hypersetup{
-  colorlinks=true,
-  linkcolor=blue!70!black,
-  citecolor=blue!70!black,
-  urlcolor=blue!70!black,
+\pdfinfo{
+/TemplateVersion (2026.1)
 }
+% Section + subsection numbers (sanctioned by the AAAI template: "May be
+% changed to 1 or 2 if section numbers are desired"); the paper cross-references
+% subsections, so numbering depth 2 is required for \ref to resolve.
+\setcounter{secnumdepth}{2}
 
 % -----------------------------------------------------------------------
-\title{\textbf{One-Step Is Optimal}: Unconditional Rectified Flows are\\
-       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts\\
-       {\normalsize A Benchmark and Task-Based Detectability Study on Low-Dose CT}}
+\title{One-Step Is Optimal: Unconditional Rectified Flows are\\
+       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts---\\
+       A Benchmark and Task-Based Detectability Study on Low-Dose CT}
 
-\author{%
-  Tim Sereda\\
-  \texttt{timgsereda@gmail.com}
-}
-\date{June 2026}
+% Camera-ready author block (hidden by the [submission] option; the style
+% file prints ``Anonymous submission'' in its place):
+% \author{Tim Sereda}
+% \affiliations{\texttt{timgsereda@gmail.com}}
+\author{Anonymous submission}
+\affiliations{Anonymous submission}
 % -----------------------------------------------------------------------
 
 \begin{document}
@@ -1072,6 +1082,9 @@ methods (Table~\ref{tab:sweep-periimage}).
 \end{table*}
 
 % -----------------------------------------------------------------------
+% NOTE (camera-ready): AAAI requires natbib + aaai2026.bst with a .bib file;
+% the inline thebibliography below is acceptable for review but should be
+% converted (\bibliographystyle{aaai2026}, \bibliography{refs}) on acceptance.
 \bibliographystyle{plain}
 \begin{thebibliography}{99}
 

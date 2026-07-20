@@ -10,3 +10,11 @@ venv/
 *.pt
 *.pth
 k8s/sweep_job.yml
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.pdf
+paper/*.bbl
+paper/*.blg
