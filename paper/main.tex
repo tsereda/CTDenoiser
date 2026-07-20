@@ -1,34 +1,44 @@
-\documentclass[10pt,twocolumn]{article}
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+% Anonymous-submission mode; for the camera-ready, drop the [submission]
+% option and restore the author block below.
+\usepackage[submission]{aaai2026}
+\usepackage{times}          % DO NOT CHANGE THIS
+\usepackage{helvet}         % DO NOT CHANGE THIS
+\usepackage{courier}        % DO NOT CHANGE THIS
+\usepackage[hyphens]{url}   % DO NOT CHANGE THIS
+\usepackage{graphicx}       % DO NOT CHANGE THIS
+\urlstyle{rm}               % DO NOT CHANGE THIS
+\def\UrlFont{\rm}           % DO NOT CHANGE THIS
+\usepackage{caption}        % DO NOT CHANGE THIS
+\frenchspacing              % DO NOT CHANGE THIS
+\setlength{\pdfpagewidth}{8.5in}  % DO NOT CHANGE THIS
+\setlength{\pdfpageheight}{11in}  % DO NOT CHANGE THIS
 
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsthm}
-\usepackage{graphicx}
+% Paper-specific packages (none on the AAAI disallowed list).
+\usepackage{amsmath,amssymb}
 \usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage{xcolor}
-\usepackage{microtype}
-\usepackage{algorithm}
-\usepackage{algpseudocode}
 \usepackage{multirow}
-\usepackage{bbm}
+\usepackage{microtype}
 
-\hypersetup{
-  colorlinks=true,
-  linkcolor=blue!70!black,
-  citecolor=blue!70!black,
-  urlcolor=blue!70!black,
+\pdfinfo{
+/TemplateVersion (2026.1)
 }
+% Section + subsection numbers (sanctioned by the AAAI template: "May be
+% changed to 1 or 2 if section numbers are desired"); the paper cross-references
+% subsections, so numbering depth 2 is required for \ref to resolve.
+\setcounter{secnumdepth}{2}
 
 % -----------------------------------------------------------------------
-\title{\textbf{One-Step Is Optimal}: Unconditional Rectified Flows are\\
-       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts\\
-       {\normalsize A Benchmark and Task-Based Detectability Study on Low-Dose CT}}
+\title{One-Step Is Optimal: Unconditional Rectified Flows are\\
+       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts---\\
+       A Benchmark and Task-Based Detectability Study on Low-Dose CT}
 
-\author{%
-  Tim Sereda\\
-  \texttt{timgsereda@gmail.com}
-}
-\date{June 2026}
+% Camera-ready author block (hidden by the [submission] option; the style
+% file prints ``Anonymous submission'' in its place):
+% \author{Tim Sereda}
+% \affiliations{\texttt{timgsereda@gmail.com}}
+\author{Anonymous submission}
+\affiliations{Anonymous submission}
 % -----------------------------------------------------------------------
 
 \begin{document}
@@ -38,26 +48,27 @@
 \begin{abstract}
 Iterative and generative denoisers are increasingly deployed on the assumption
 that refining a sample over many steps beats a single regression pass.  We prove
-the opposite for \emph{label-free} denoising: an \emph{unconditional} rectified
+the opposite for \emph{label-free} denoising.  An \emph{unconditional} rectified
 flow, trained on two noisy observations of the same signal (the Noise2Noise
-setting), recovers the one-step MMSE denoiser with no clean targets---and any
-multi-step integration \emph{provably departs} from it, because the flow's
-terminal marginal is the noisy law, not the clean signal.  A matched-pairing
-experiment confirms both halves: one-step flow ties a direct regressor while
-multi-step Euler integration monotonically erodes fidelity, without ever
-fabricating structure---so the decorrelated \emph{pairing}, not the flow
-machinery, is the useful idea (a one-step regressor on those pairs is our best
-label-free result, $+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an
-open benchmark evaluating five architectures across supervised, similarity- and
-blind-spot self-supervised, and per-image regimes on low-dose CT.  There the
-stakes are concrete: among label-free methods only the correlated-noise-aware
-Noise2Sim beats the noisy baseline while blind-spot Noise2Void is flat-to-negative
-(CT's correlated noise violates pixel-independence), and---by a task-based
-channelized Hotelling observer---the $\sim$4\,dB PSNR that supervised denoisers do
-gain \emph{erodes} low-contrast lesion detectability rather than improving it, a
-shift PSNR and SSIM miss.  All code, model definitions, and data-loading utilities
-are released at
-\href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
+setting), has a minimiser whose one-step readout is exactly the MMSE
+denoiser---recovered with no clean targets---and any multi-step integration
+\emph{provably departs} from it, because the flow's terminal marginal is the
+noisy law, not the clean signal.  A matched-pairing experiment confirms both
+halves: one-step flow ties a direct regressor, while multi-step Euler
+integration monotonically erodes fidelity, without ever fabricating structure.
+The useful ingredient is therefore the decorrelated \emph{pairing}, not the flow
+machinery---a one-step regressor on those pairs is our best label-free result
+($+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an open benchmark
+evaluating five architectures across supervised, similarity- and blind-spot
+self-supervised, and per-image regimes on low-dose CT, where the stakes are
+concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
+beats the noisy baseline, while blind-spot Noise2Void is
+flat-to-negative---CT's spatially correlated noise violates the
+pixel-independence these methods assume.  And under a task-based channelized
+Hotelling observer, the $\sim$4\,dB PSNR that supervised denoisers do gain
+\emph{erodes} low-contrast lesion detectability rather than improving it, a shift
+PSNR and SSIM miss.  All code, model definitions, and data-loading utilities will
+be released openly (repository link withheld for anonymous review).
 \end{abstract}
 
 % -----------------------------------------------------------------------
@@ -1071,6 +1082,9 @@ methods (Table~\ref{tab:sweep-periimage}).
 \end{table*}
 
 % -----------------------------------------------------------------------
+% NOTE (camera-ready): AAAI requires natbib + aaai2026.bst with a .bib file;
+% the inline thebibliography below is acceptable for review but should be
+% converted (\bibliographystyle{aaai2026}, \bibliography{refs}) on acceptance.
 \bibliographystyle{plain}
 \begin{thebibliography}{99}
 
