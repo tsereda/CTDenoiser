@@ -38,26 +38,27 @@
 \begin{abstract}
 Iterative and generative denoisers are increasingly deployed on the assumption
 that refining a sample over many steps beats a single regression pass.  We prove
-the opposite for \emph{label-free} denoising: an \emph{unconditional} rectified
+the opposite for \emph{label-free} denoising.  An \emph{unconditional} rectified
 flow, trained on two noisy observations of the same signal (the Noise2Noise
-setting), recovers the one-step MMSE denoiser with no clean targets---and any
-multi-step integration \emph{provably departs} from it, because the flow's
-terminal marginal is the noisy law, not the clean signal.  A matched-pairing
-experiment confirms both halves: one-step flow ties a direct regressor while
-multi-step Euler integration monotonically erodes fidelity, without ever
-fabricating structure---so the decorrelated \emph{pairing}, not the flow
-machinery, is the useful idea (a one-step regressor on those pairs is our best
-label-free result, $+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an
-open benchmark evaluating five architectures across supervised, similarity- and
-blind-spot self-supervised, and per-image regimes on low-dose CT.  There the
-stakes are concrete: among label-free methods only the correlated-noise-aware
-Noise2Sim beats the noisy baseline while blind-spot Noise2Void is flat-to-negative
-(CT's correlated noise violates pixel-independence), and---by a task-based
-channelized Hotelling observer---the $\sim$4\,dB PSNR that supervised denoisers do
-gain \emph{erodes} low-contrast lesion detectability rather than improving it, a
-shift PSNR and SSIM miss.  All code, model definitions, and data-loading utilities
-are released at
-\href{https://github.com/tsereda/CTDenoiser}{github.com/tsereda/CTDenoiser}.
+setting), has a minimiser whose one-step readout is exactly the MMSE
+denoiser---recovered with no clean targets---and any multi-step integration
+\emph{provably departs} from it, because the flow's terminal marginal is the
+noisy law, not the clean signal.  A matched-pairing experiment confirms both
+halves: one-step flow ties a direct regressor, while multi-step Euler
+integration monotonically erodes fidelity, without ever fabricating structure.
+The useful ingredient is therefore the decorrelated \emph{pairing}, not the flow
+machinery---a one-step regressor on those pairs is our best label-free result
+($+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an open benchmark
+evaluating five architectures across supervised, similarity- and blind-spot
+self-supervised, and per-image regimes on low-dose CT, where the stakes are
+concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
+beats the noisy baseline, while blind-spot Noise2Void is
+flat-to-negative---CT's spatially correlated noise violates the
+pixel-independence these methods assume.  And under a task-based channelized
+Hotelling observer, the $\sim$4\,dB PSNR that supervised denoisers do gain
+\emph{erodes} low-contrast lesion detectability rather than improving it, a shift
+PSNR and SSIM miss.  All code, model definitions, and data-loading utilities will
+be released openly (repository link withheld for anonymous review).
 \end{abstract}
 
 % -----------------------------------------------------------------------
