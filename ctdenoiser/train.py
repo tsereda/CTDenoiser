@@ -37,6 +37,8 @@ from .data.dataset import (
     ANATOMY_WINDOWS,
     DICOMCTDataset,
     HDF5CTDataset,
+    NaturalImageDenoisingDataset,
+    SimulatedLowDoseCTDataset,
     SyntheticCTDataset,
     window_for_anatomy,
 )
@@ -114,8 +116,18 @@ def dataset_provenance(train_loader, val_loader, full_slice):
         "n_val_slices": len(val_loader.dataset),
     }
     if full_slice:
-        val_pids = sorted(getattr(val_loader.dataset, "low_volumes", {}).keys())
-        train_pids = getattr(train_loader.dataset, "low_volumes", {})
+        # Paired datasets key volumes by patient in ``low_volumes``; the
+        # simulated-LDCT dataset simulates the low arm on the fly and keeps only
+        # ``full_volumes``. Natural images have no patient concept (neither).
+        def _pids(ds):
+            for attr in ("low_volumes", "full_volumes"):
+                store = getattr(ds, attr, None)
+                if store:
+                    return store
+            return {}
+
+        val_pids = sorted(_pids(val_loader.dataset).keys())
+        train_pids = _pids(train_loader.dataset)
         info["n_train_patients"] = len(train_pids)
         info["n_val_patients"] = len(val_pids)
         info["val_patient_ids"] = ",".join(val_pids)
@@ -191,6 +203,58 @@ def build_loaders(args):
         val_ds = DICOMCTDataset(
             args.dicom_root, val_p, patch_size=args.patch_size, train=False,
             hu_offset=args.hu_offset, hu_scale=args.hu_scale,
+        )
+        train_loader = _train_loader(train_ds, args)
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
+        return train_loader, val_loader, True
+
+    if getattr(args, "natural", False):
+        train_items, val_items = NaturalImageDenoisingDataset.split_items(
+            root=args.natural_root, length=args.natural_len,
+            val_fraction=args.val_fraction, seed=args.seed,
+        )
+        print(
+            f"Natural images: {len(train_items)} train / {len(val_items)} val "
+            f"(noise={args.noise_mode} std={args.noise_std} pair={args.pair_mode}"
+            f"{'' if args.natural_root else ' [procedural]'})"
+        )
+        common = dict(
+            root=args.natural_root, noise_std=args.noise_std,
+            noise_mode=args.noise_mode, correlation_sigma=args.correlation_sigma,
+            pair_mode=args.pair_mode, seed=args.seed,
+        )
+        train_ds = NaturalImageDenoisingDataset(
+            train_items, patch_size=args.patch_size, train=True,
+            samples_per_image=args.samples_per_image, **common,
+        )
+        val_ds = NaturalImageDenoisingDataset(
+            val_items, patch_size=args.patch_size, train=False, **common,
+        )
+        train_loader = _train_loader(train_ds, args)
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
+        return train_loader, val_loader, True
+
+    if getattr(args, "sim_ldct", False):
+        train_p, val_p = SimulatedLowDoseCTDataset.split_patients(
+            h5_path=args.sim_source, n_patients=args.sim_patients,
+            val_fraction=args.val_fraction, seed=args.seed,
+        )
+        print(
+            f"Simulated LDCT: {len(train_p)} train / {len(val_p)} val patients "
+            f"(base_std={args.sim_base_std} signal_std={args.sim_signal_std} "
+            f"pair={args.pair_mode}{'' if args.sim_source else ' [procedural]'})"
+        )
+        common = dict(
+            h5_path=args.sim_source, base_std=args.sim_base_std,
+            signal_std=args.sim_signal_std,
+            correlation_sigma=args.sim_correlation_sigma,
+            pair_mode=args.pair_mode, seed=args.seed,
+        )
+        train_ds = SimulatedLowDoseCTDataset(
+            train_p, patch_size=args.patch_size, train=True, **common,
+        )
+        val_ds = SimulatedLowDoseCTDataset(
+            val_p, patch_size=args.patch_size, train=False, **common,
         )
         train_loader = _train_loader(train_ds, args)
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
@@ -520,6 +584,53 @@ def main(argv=None):
                              "Window is [-offset, scale-offset].")
     parser.add_argument("--hu-scale", type=float, default=None,
                         help="override the --anatomy window scale (HU width).")
+    # --- Natural-image denoising dataset (generalises the theorem beyond CT) ---
+    parser.add_argument("--natural", action="store_true",
+                        help="train/eval on the natural-image denoising dataset: "
+                             "clean images + synthetic noise. With no "
+                             "--natural-root a procedural image set is generated "
+                             "(self-contained, no download).")
+    parser.add_argument("--natural-root", type=str, default=None, metavar="DIR",
+                        help="directory of clean grayscale images for --natural "
+                             "(any PIL-readable files); omit for procedural images")
+    parser.add_argument("--natural-len", type=int, default=256,
+                        help="number of procedural images when --natural has no "
+                             "--natural-root")
+    parser.add_argument("--samples-per-image", type=int, default=8,
+                        help="random patches drawn per image each epoch "
+                             "(--natural training)")
+    parser.add_argument("--noise-std", type=float, default=0.1,
+                        help="synthetic noise std in [0,1] units (--natural)")
+    parser.add_argument("--noise-mode", choices=["gaussian", "correlated"],
+                        default="gaussian",
+                        help="synthetic noise regime: i.i.d. gaussian or "
+                             "spatially-correlated (blurred) (--natural)")
+    parser.add_argument("--correlation-sigma", type=float, default=1.5,
+                        help="Gaussian blur sigma for correlated noise (--natural)")
+    parser.add_argument("--pair-mode", choices=["clean", "noisy"],
+                        default="clean",
+                        help="target is the clean image (supervised) or a second "
+                             "independent noisy view (Noise2Noise); shared by "
+                             "--natural and --sim-ldct")
+    # --- Simulated low-dose CT dataset (a second, independent LDCT source) ---
+    parser.add_argument("--sim-ldct", action="store_true",
+                        help="train/eval on simulated low-dose CT: the low arm is "
+                             "manufactured from full-dose CT with a correlated, "
+                             "signal-dependent noise model. With no --sim-source a "
+                             "procedural phantom set is generated.")
+    parser.add_argument("--sim-source", type=str, default=None, metavar="H5",
+                        help="HDF5 cache of full-dose CT (/patients/{id}/full) for "
+                             "--sim-ldct; omit for procedural phantoms")
+    parser.add_argument("--sim-patients", type=int, default=8,
+                        help="number of procedural phantom patients when "
+                             "--sim-ldct has no --sim-source")
+    parser.add_argument("--sim-base-std", type=float, default=0.03,
+                        help="signal-independent noise floor (--sim-ldct)")
+    parser.add_argument("--sim-signal-std", type=float, default=0.06,
+                        help="signal-dependent noise gain (--sim-ldct)")
+    parser.add_argument("--sim-correlation-sigma", type=float, default=1.0,
+                        help="Gaussian blur sigma for the simulated FBP noise "
+                             "correlation (--sim-ldct)")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=1)

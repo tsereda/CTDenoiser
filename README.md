@@ -13,8 +13,9 @@ ctdenoiser/
     ctformer.py        # CTformer (T2TD / IT2TD + Transformer blocks)
     redcnn.py          # RED-CNN baseline
   data/
-    dataset.py         # DICOMCTDataset + SyntheticCTDataset
+    dataset.py         # DICOM / HDF5 CT + NaturalImage + SimulatedLowDoseCT + Synthetic
     dicom.py           # DICOM series reader (HU conversion)
+    noise.py           # synthetic-noise regimes (i.i.d. / correlated) + LDCT simulation
   selfsupervised.py    # Noise2Void blind-spot + Noise2Sim similarity self-supervision
   zeroshot.py          # Zero-Shot Noise2Noise + Filter2Noise (per-image, data-free)
   metrics.py           # PSNR / SSIM / RMSE / GMSD / NPS-ratio
@@ -184,6 +185,61 @@ anatomy/window in the logged config, and `benchmark_report.py` facets by it.
 
 Without `--dicom-root`, a synthetic noisy/clean dataset is generated so the
 pipeline runs end to end.
+
+### Natural-image denoising (beyond CT)
+
+The one-step-optimal / multi-step-hurts result is **not CT-specific**, so the
+`--natural` dataset stresses it on general images: clean images plus synthetic
+noise, under two regimes and two pairings. It keeps the same `(low, full)`
+interface, so every model and training mode works unchanged.
+
+```bash
+# i.i.d. Gaussian noise, clean target (supervised)
+python -m ctdenoiser.train --model dncnn --natural --natural-root /data/bsd \
+    --noise-std 0.1 --noise-mode gaussian --epochs 50
+
+# spatially-correlated noise, Noise2Noise pairing (two independent noisy views)
+python -m ctdenoiser.train --model dncnn --natural --natural-root /data/bsd \
+    --noise-mode correlated --correlation-sigma 1.5 --pair-mode noisy --epochs 50
+```
+
+`--natural-root` is a directory of clean grayscale images (any PIL-readable
+files). Omit it to generate a deterministic **procedural** image set so the
+dataset runs self-contained (tests / smoke runs, no download):
+
+```bash
+python -m ctdenoiser.train --model dncnn --natural --natural-len 256 --epochs 1
+```
+
+| flag | meaning |
+| --- | --- |
+| `--noise-mode {gaussian,correlated}` | i.i.d. white vs. blurred (FBP-like) noise |
+| `--noise-std` | noise level in `[0,1]` units |
+| `--correlation-sigma` | Gaussian blur σ for correlated noise |
+| `--pair-mode {clean,noisy}` | clean target (supervised) vs. second noisy view (N2N) |
+
+### Simulated low-dose CT (a second, independent LDCT source)
+
+`--sim-ldct` manufactures the low-dose arm from full-dose CT with a
+physically-motivated noise model (correlated by an FBP-like blur, and
+signal-dependent so denser tissue is noisier). This gives a low/full source
+independent of any single real acquisition — the "does the clinical result hold
+on other low-dose data?" robustness axis — without external DICOM.
+
+```bash
+# simulate low-dose from an existing full-dose HDF5 cache
+python -m ctdenoiser.train --model redcnn --sim-ldct \
+    --sim-source /data/ldct_abdomen.h5 --sim-base-std 0.03 --sim-signal-std 0.06 \
+    --epochs 50
+
+# procedural CT phantoms (self-contained smoke run)
+python -m ctdenoiser.train --model redcnn --sim-ldct --sim-patients 8 --epochs 1
+```
+
+`--sim-source` reuses a `scripts/convert_dicom_to_h5.py` cache (reads its
+`/patients/{id}/full` volumes); omit it for procedural phantoms. `--pair-mode
+noisy` yields two independent simulated low-dose views (Noise2Noise) instead of
+the clean target.
 
 ## Benchmark report
 
