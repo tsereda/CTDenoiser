@@ -52,16 +52,20 @@ the opposite for \emph{label-free} denoising.  An \emph{unconditional} rectified
 flow, trained on two noisy observations of the same signal (the Noise2Noise
 setting), has a minimiser whose one-step readout is exactly the MMSE
 denoiser, recovered with no clean targets, and any multi-step integration
-\emph{provably departs} from it, because the flow's terminal marginal is the
-noisy law, not the clean signal.  A matched-pairing experiment confirms both
-halves: one-step flow ties a direct regressor, while multi-step Euler
-integration monotonically erodes fidelity, without ever fabricating structure.
+\emph{provably departs} from it---exactly so in a tractable Gaussian model---because
+the flow's terminal marginal is the noisy law, not the clean signal.  A
+matched-pairing experiment confirms both halves: one-step flow ties a direct
+regressor, while multi-step Euler integration monotonically erodes fidelity,
+without ever fabricating structure.  Counterintuitively, this failure \emph{grows
+with training}: a better-fit velocity integrates more faithfully toward the noisy
+terminal law, so multi-step quality degrades as the model improves---a prediction
+the departure result makes and the experiments bear out.
 The useful ingredient is therefore the decorrelated \emph{pairing}, not the flow
 machinery: a one-step regressor on those pairs is our best label-free result
-($+1.99$\,dB).  We establish this in \textbf{CTDenoiser}, an open benchmark
-evaluating five architectures across supervised, similarity- and blind-spot
-self-supervised, and per-image regimes on low-dose CT, where the stakes are
-concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
+($+1.99$\,dB).  We establish this on \textbf{CTDenoiser}, an open benchmark we use
+as a controlled, matched-data testbed for the claim---five architectures across
+supervised, similarity- and blind-spot self-supervised, and per-image regimes on
+low-dose CT, where the stakes are concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
 beats the noisy baseline, while blind-spot Noise2Void is
 flat-to-negative, because CT's spatially correlated noise violates the
 pixel-independence these methods assume.  And under a task-based channelized
@@ -133,10 +137,18 @@ We address this with CTDenoiser, a self-contained benchmark that:
         trade-offs of generative denoisers.
 \end{itemize}
 
+This benchmark is the substrate for the theoretical result, not an end in
+itself: its matched-data, matched-backbone control is precisely what lets the
+label-free flow-versus-regression comparison below isolate the \emph{estimator}
+from the \emph{pairing}, and turn the one-step-optimality claim into a controlled
+test rather than an anecdote.
+
 Our contributions are: (i) a theoretical result---an unconditional rectified
 flow trained on Noise2Noise pairs recovers the one-step MMSE denoiser, together
-with a finite-step departure proposition proving multi-step integration
-monotonically worsens it (Section~\ref{sec:method}); (ii) a matched-data,
+with a finite-step departure proposition proving (exactly, in a tractable
+Gaussian model) that multi-step integration monotonically worsens it, with the
+counterintuitive corollary that the degradation \emph{grows as the velocity is
+better fit} (Section~\ref{sec:method}); (ii) a matched-data,
 matched-backbone experiment confirming both halves---one-step flow ties direct
 regression while iteration erodes it---on a reproducible five-architecture,
 five-regime LDCT benchmark with a corrected full-slice evaluation
@@ -609,6 +621,12 @@ Table~\ref{tab:detect} and Figure~\ref{fig:detect} show four things.
 \emph{headroom} is small: the clean reference exceeds the noisy input by only
 $\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
 lesions are nearly as detectable in the noisy image as in the noise-free one.
+This narrow headroom is not an artefact of the test but the clinically relevant
+regime: at a realistic LDCT dose the noise floor already leaves supra-threshold
+lesions detectable, so the question is not whether denoising \emph{recovers} lost
+detectability but whether it \emph{preserves} it---and, as the next finding shows,
+even where headroom does exist (high contrast) the denoisers spend it, eroding
+detectability rather than closing the gap to the clean ceiling.
 \textbf{Second}, although these same models gain $4.0$--$4.3$\,dB PSNR
 (supervised) and $1.7$--$1.8$\,dB (Noise2Sim) over the input
 (Table~\ref{tab:results}), none improves detectability at the
