@@ -1,0 +1,89 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Multi-step-hurts on NATURAL images -- the FLOW / steps arm.
+#
+# Mirror of sweep_hallucination.yml on the --natural dataset (i.i.d. gaussian
+# noise, the regime the theorem is exact in). Each (exclude-radius, seed) SSFlow
+# model is trained ONCE at one step, then re-evaluated at 1/4/8/20 inference
+# steps via --eval-steps-sweep, logging val/steps{k}/psnr. The expected
+# monotone quality erosion with more Euler steps -- reproduced off CT data --
+# is the generalisation of the paper's central multi-step ablation.
+#
+# (The det/steps{k}/* fabrication index is CT-specific -- it inserts HU lesions
+# -- so it is omitted here; the quality-vs-steps curve carries the claim.)
+#
+# Grid = 3 exclude-radius x 3 seeds = 9 runs.
+#
+# Deploy with the lean template:
+#   python sweep.py sweep_natural_hallucination.yml --template k8s/tr_job_template_synth.yml --agents 3
+parameters:
+  model:
+    value: ssflow
+  training-mode:
+    value: ssflow
+
+  noise-mode:
+    value: gaussian
+
+  epochs:
+    value: 50
+
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+  samples-per-image:
+    value: 8
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  ssflow-pairing:
+    value: similarity
+  ssflow-search-radius:
+    value: 4
+  ssflow-patch-radius:
+    value: 1
+  ssflow-num-similar:
+    value: 1
+
+  # The correlated-noise knob; r=1 recovers the Noise2Sim target.
+  ssflow-exclude-radius:
+    values:
+      - 1
+      - 2
+      - 3
+
+  # One-step is the model default and best-epoch metric; the full curve comes
+  # from --eval-steps-sweep post-training.
+  flow-steps:
+    value: 1
+  flow-steps-eval:
+    value: 1
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --natural
+  - --natural-root=/data/natural_images
+  - --noise-std=0.1
+  - --wandb-project=ctdenoiser-sweep
+  # Re-evaluate the trained checkpoint at each step count (one-step MMSE ->
+  # multi-step generative Euler): logs val/steps{k}/*.
+  - --eval-steps-sweep
+  - "1"
+  - "4"
+  - "8"
+  - "20"

@@ -151,11 +151,12 @@ def test_sim_ldct_eval_deterministic_and_split():
 def _loader_args(**overrides):
     base = dict(
         h5_path=None, dicom_root=None, mmap_cache=None,
-        natural=False, natural_root=None, natural_len=8, samples_per_image=2,
+        natural=False, natural_root=None, natural_procedural=False,
+        natural_len=8, samples_per_image=2,
         noise_std=0.1, noise_mode="gaussian", correlation_sigma=1.5,
         pair_mode="clean",
-        sim_ldct=False, sim_source=None, sim_patients=4, sim_base_std=0.03,
-        sim_signal_std=0.06, sim_correlation_sigma=1.0,
+        sim_ldct=False, sim_source=None, sim_procedural=False, sim_patients=4,
+        sim_base_std=0.03, sim_signal_std=0.06, sim_correlation_sigma=1.0,
         patch_size=32, val_fraction=0.25, seed=0,
         batch_size=4, num_workers=0, prefetch_factor=4, synthetic_len=8,
     )
@@ -180,3 +181,30 @@ def test_build_loaders_sim_ldct():
     assert full_slice is True
     low, full = next(iter(train_loader))
     assert low.shape[0] == 4  # batch_size
+
+
+# --------------------------------------------------------------------------- #
+# CLI: explicit data source required (no silent synthetic fallback)
+# --------------------------------------------------------------------------- #
+def test_natural_requires_explicit_source():
+    from ctdenoiser.train import main
+
+    # --natural with neither --natural-root nor --natural-procedural: error out
+    # rather than silently training on synthetic images.
+    with pytest.raises(SystemExit):
+        main(["--natural", "--device", "cpu"])
+
+
+def test_natural_rejects_both_sources(tmp_path):
+    from ctdenoiser.train import main
+
+    with pytest.raises(SystemExit):
+        main(["--natural", "--natural-root", str(tmp_path),
+              "--natural-procedural", "--device", "cpu"])
+
+
+def test_sim_ldct_requires_explicit_source():
+    from ctdenoiser.train import main
+
+    with pytest.raises(SystemExit):
+        main(["--sim-ldct", "--device", "cpu"])

@@ -213,10 +213,12 @@ def build_loaders(args):
             root=args.natural_root, length=args.natural_len,
             val_fraction=args.val_fraction, seed=args.seed,
         )
+        src = (f"root={args.natural_root}" if args.natural_root
+               else "*** SYNTHETIC procedural images (not real data) ***")
         print(
-            f"Natural images: {len(train_items)} train / {len(val_items)} val "
-            f"(noise={args.noise_mode} std={args.noise_std} pair={args.pair_mode}"
-            f"{'' if args.natural_root else ' [procedural]'})"
+            f"Natural images [{src}]: {len(train_items)} train / "
+            f"{len(val_items)} val (noise={args.noise_mode} std={args.noise_std} "
+            f"pair={args.pair_mode})"
         )
         common = dict(
             root=args.natural_root, noise_std=args.noise_std,
@@ -239,10 +241,12 @@ def build_loaders(args):
             h5_path=args.sim_source, n_patients=args.sim_patients,
             val_fraction=args.val_fraction, seed=args.seed,
         )
+        src = (f"source={args.sim_source}" if args.sim_source
+               else "*** SYNTHETIC procedural phantoms (not real data) ***")
         print(
-            f"Simulated LDCT: {len(train_p)} train / {len(val_p)} val patients "
-            f"(base_std={args.sim_base_std} signal_std={args.sim_signal_std} "
-            f"pair={args.pair_mode}{'' if args.sim_source else ' [procedural]'})"
+            f"Simulated LDCT [{src}]: {len(train_p)} train / {len(val_p)} val "
+            f"patients (base_std={args.sim_base_std} "
+            f"signal_std={args.sim_signal_std} pair={args.pair_mode})"
         )
         common = dict(
             h5_path=args.sim_source, base_std=args.sim_base_std,
@@ -587,15 +591,19 @@ def main(argv=None):
     # --- Natural-image denoising dataset (generalises the theorem beyond CT) ---
     parser.add_argument("--natural", action="store_true",
                         help="train/eval on the natural-image denoising dataset: "
-                             "clean images + synthetic noise. With no "
-                             "--natural-root a procedural image set is generated "
-                             "(self-contained, no download).")
+                             "clean images + synthetic noise. Requires either "
+                             "--natural-root (real images) or --natural-procedural "
+                             "(synthetic) -- there is no silent default source.")
     parser.add_argument("--natural-root", type=str, default=None, metavar="DIR",
                         help="directory of clean grayscale images for --natural "
-                             "(any PIL-readable files); omit for procedural images")
+                             "(any PIL-readable files)")
+    parser.add_argument("--natural-procedural", action="store_true",
+                        help="use a generated synthetic image set for --natural "
+                             "instead of real images. Opt-in (not a fallback) so a "
+                             "missing/misconfigured --natural-root fails loudly "
+                             "rather than silently training on synthetic data.")
     parser.add_argument("--natural-len", type=int, default=256,
-                        help="number of procedural images when --natural has no "
-                             "--natural-root")
+                        help="number of procedural images (--natural-procedural)")
     parser.add_argument("--samples-per-image", type=int, default=8,
                         help="random patches drawn per image each epoch "
                              "(--natural training)")
@@ -616,14 +624,19 @@ def main(argv=None):
     parser.add_argument("--sim-ldct", action="store_true",
                         help="train/eval on simulated low-dose CT: the low arm is "
                              "manufactured from full-dose CT with a correlated, "
-                             "signal-dependent noise model. With no --sim-source a "
-                             "procedural phantom set is generated.")
+                             "signal-dependent noise model. Requires either "
+                             "--sim-source (real full-dose h5) or --sim-procedural "
+                             "(synthetic phantoms) -- there is no silent default.")
     parser.add_argument("--sim-source", type=str, default=None, metavar="H5",
                         help="HDF5 cache of full-dose CT (/patients/{id}/full) for "
-                             "--sim-ldct; omit for procedural phantoms")
+                             "--sim-ldct")
+    parser.add_argument("--sim-procedural", action="store_true",
+                        help="use generated phantom volumes for --sim-ldct instead "
+                             "of a real full-dose cache. Opt-in (not a fallback) so "
+                             "a missing/misconfigured --sim-source fails loudly.")
     parser.add_argument("--sim-patients", type=int, default=8,
-                        help="number of procedural phantom patients when "
-                             "--sim-ldct has no --sim-source")
+                        help="number of procedural phantom patients "
+                             "(--sim-procedural)")
     parser.add_argument("--sim-base-std", type=float, default=0.03,
                         help="signal-independent noise floor (--sim-ldct)")
     parser.add_argument("--sim-signal-std", type=float, default=0.06,
@@ -702,6 +715,25 @@ def main(argv=None):
             "--model ssflow and --training-mode ssflow must be used together: "
             "the self-supervised flow has its own velocity network and loss."
         )
+
+    # Require an explicit data source for the synthetic-noise datasets. Silently
+    # falling back to generated images/phantoms when a --*-root/-source is
+    # missing or mistyped hides the mistake -- the run trains on synthetic data
+    # and reports plausible-looking metrics. Force the choice instead.
+    if args.natural:
+        if bool(args.natural_root) == bool(args.natural_procedural):
+            parser.error(
+                "--natural needs exactly one source: --natural-root DIR (real "
+                "images) or --natural-procedural (synthetic). Pass one, not both "
+                "or neither."
+            )
+    if args.sim_ldct:
+        if bool(args.sim_source) == bool(args.sim_procedural):
+            parser.error(
+                "--sim-ldct needs exactly one source: --sim-source H5 (real "
+                "full-dose cache) or --sim-procedural (synthetic phantoms). Pass "
+                "one, not both or neither."
+            )
 
     # Resolve the HU window: --anatomy preset, with explicit --hu-offset/--hu-scale
     # taking precedence. Stored back onto args so build_loaders / provenance see

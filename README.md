@@ -181,6 +181,32 @@ python scripts/benchmark_report.py abdomen.csv chest.csv head.csv --out report.h
 `ldct_preprocessed.h5`). All runs can share one W&B project — each carries its
 anatomy/window in the logged config, and `benchmark_report.py` facets by it.
 
+### Cross-domain sweeps (natural images + simulated LDCT)
+
+The same data-pod run also prepares the two cross-domain datasets: it fetches
+**BSDS500** to `/data/natural_images/` (for `--natural`), and the simulated LDCT
+arm (`--sim-ldct`) reuses the abdomen full-dose cache — so no extra download,
+just keep `abdomen` in `ANATOMIES`. Both sweeps read their inputs directly from
+the read-only `/data` mount, so they use the **lean** job template
+`k8s/tr_job_template_synth.yml` (no h5 copy / npy unpack) via `--template`:
+
+```bash
+# generalise the theorem beyond CT (i.i.d. + correlated noise, both regimes)
+python sweep.py sweep_natural.yml \
+    --template k8s/tr_job_template_synth.yml --agents 3      # 90 runs (full grid)
+
+# the decisive one-step-flow-ties-regression pair, off CT data (gaussian)
+python sweep.py sweep_natural_flow_vs_reg.yml   --template k8s/tr_job_template_synth.yml --agents 3
+python sweep.py sweep_natural_hallucination.yml --template k8s/tr_job_template_synth.yml --agents 3
+
+# second, independent LDCT source (simulated low-dose from full-dose abdomen)
+python sweep.py sweep_sim_ldct.yml --template k8s/tr_job_template_synth.yml --agents 3
+```
+
+`--anatomy` / `--h5-name` are ignored for the lean template (it reads `/data`
+directly). Export each sweep's CSV into `results/` and merge with
+`benchmark_report.py` alongside the CT runs.
+
 ### Synthetic (smoke test)
 
 Without `--dicom-root`, a synthetic noisy/clean dataset is generated so the
@@ -204,11 +230,13 @@ python -m ctdenoiser.train --model dncnn --natural --natural-root /data/bsd \
 ```
 
 `--natural-root` is a directory of clean grayscale images (any PIL-readable
-files). Omit it to generate a deterministic **procedural** image set so the
-dataset runs self-contained (tests / smoke runs, no download):
+files). `--natural` **requires** either `--natural-root` or, to deliberately run
+on a deterministic **procedural** image set (tests / smoke runs, no download),
+the explicit `--natural-procedural` — there is no silent fallback, so a mistyped
+or missing root fails loudly instead of quietly training on synthetic data:
 
 ```bash
-python -m ctdenoiser.train --model dncnn --natural --natural-len 256 --epochs 1
+python -m ctdenoiser.train --model dncnn --natural --natural-procedural --epochs 1
 ```
 
 | flag | meaning |
@@ -233,13 +261,14 @@ python -m ctdenoiser.train --model redcnn --sim-ldct \
     --epochs 50
 
 # procedural CT phantoms (self-contained smoke run)
-python -m ctdenoiser.train --model redcnn --sim-ldct --sim-patients 8 --epochs 1
+python -m ctdenoiser.train --model redcnn --sim-ldct --sim-procedural --sim-patients 8 --epochs 1
 ```
 
-`--sim-source` reuses a `scripts/convert_dicom_to_h5.py` cache (reads its
-`/patients/{id}/full` volumes); omit it for procedural phantoms. `--pair-mode
-noisy` yields two independent simulated low-dose views (Noise2Noise) instead of
-the clean target.
+`--sim-ldct` **requires** either `--sim-source` (a
+`scripts/convert_dicom_to_h5.py` cache, read from its `/patients/{id}/full`
+volumes) or the explicit `--sim-procedural` for phantoms — no silent fallback.
+`--pair-mode noisy` yields two independent simulated low-dose views
+(Noise2Noise) instead of the clean target.
 
 ## Benchmark report
 

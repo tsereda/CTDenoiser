@@ -137,19 +137,27 @@ def requeue_dead_runs(entity, project, sweep_id, include_running=False,
 # ============================================================================
 
 def generate_indexed_job(sweep_id, entity, project, num_agents=4,
-                         h5_name='ldct_abdomen.h5'):
+                         h5_name='ldct_abdomen.h5', template_path=None):
     """Generate an Indexed Job YAML from template.
 
     ``h5_name`` is the preprocessed cache on the PVC to sweep (the data pod
     writes one ``ldct_<anatomy>.h5`` per anatomy). Each anatomy is its own
     sweep over its own cache; the anatomy/window is logged from the file's
     attrs so the runs stay distinguishable in one W&B project.
+
+    ``template_path`` selects the Job template. The default CT template copies
+    the h5 to local disk and unpacks it to an mmap-able .npy cache; the lean
+    ``tr_job_template_synth.yml`` (for the --natural / --sim-ldct sweeps) has no
+    ``ldct_preprocessed.h5`` placeholder because those datasets read straight
+    from the read-only /data mount -- so the h5 substitution is skipped when the
+    placeholder is absent.
     """
+    template_path = template_path or TEMPLATE_PATH
     try:
-        with open(TEMPLATE_PATH, 'r') as f:
+        with open(template_path, 'r') as f:
             job_yaml = yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Error: Template file '{TEMPLATE_PATH}' not found!")
+        print(f"Error: Template file '{template_path}' not found!")
         sys.exit(1)
 
     job_yaml['spec']['completions'] = num_agents
@@ -167,14 +175,22 @@ def generate_indexed_job(sweep_id, entity, project, num_agents=4,
     script = container['args'][0]
     h5_placeholder = 'ldct_preprocessed.h5'
     sweep_placeholder = f'{DEFAULT_ENTITY}/{DEFAULT_PROJECT}/SWEEP_ID'
-    if h5_placeholder not in script or sweep_placeholder not in script:
+    # The sweep target must always be substitutable; the h5 copy placeholder is
+    # optional (the lean synth template has none -- it reads /data directly).
+    if sweep_placeholder not in script:
         print(
-            f"Error: template {TEMPLATE_PATH} is missing an expected placeholder "
-            f"('{h5_placeholder}' and/or '{sweep_placeholder}'). Refusing to "
-            f"deploy a half-substituted job."
+            f"Error: template {template_path} is missing the sweep placeholder "
+            f"('{sweep_placeholder}'). Refusing to deploy a half-substituted job."
         )
         sys.exit(1)
-    script = script.replace(h5_placeholder, h5_name)
+    if h5_placeholder in script:
+        script = script.replace(h5_placeholder, h5_name)
+    else:
+        print(
+            f"  Note: template {template_path} has no '{h5_placeholder}' "
+            f"placeholder; the sweep reads its data from /data directly "
+            f"(--h5-name/--anatomy are ignored)."
+        )
     script = script.replace(sweep_placeholder, f"{entity}/{project}/{sweep_id}")
     container['args'][0] = script
 
@@ -436,6 +452,12 @@ Examples:
     parser.add_argument('--h5-name', default=None,
                         help='explicit PVC cache filename, overriding --anatomy '
                              '(e.g. ldct_preprocessed.h5 for a legacy cache)')
+    parser.add_argument('--template', default=None,
+                        help='Job template to deploy (default: '
+                             'k8s/tr_job_template.yml). Use '
+                             'k8s/tr_job_template_synth.yml for the --natural / '
+                             '--sim-ldct sweeps, which read data from /data '
+                             'directly (no h5 copy / npy unpack).')
     parser.add_argument('--deploy', type=str, metavar='SWEEP_ID',
                         help='Deploy agents for existing sweep ID')
     parser.add_argument('--resume', type=str, metavar='SWEEP_ID',
@@ -498,6 +520,7 @@ Examples:
         project=project,
         num_agents=args.agents,
         h5_name=h5_name,
+        template_path=args.template,
     )
 
     print(f"\nDeploying job to Kubernetes...")

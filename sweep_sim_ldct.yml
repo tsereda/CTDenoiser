@@ -1,0 +1,91 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Simulated low-dose CT benchmark -- a second, independent LDCT source.
+#
+# Same model x training-mode x seed grid as the main CT sweep (sweep.yml), but
+# on the --sim-ldct dataset: the low-dose arm is manufactured from the abdomen
+# full-dose volumes with a correlated, signal-dependent noise model instead of
+# read from real paired scans. Proves the clinical + detectability result is not
+# tied to one real acquisition. Reuses /data/ldct_abdomen.h5 (its /full
+# volumes), so it needs NO extra data-pod download -- just the abdomen cache.
+#
+# The window is the abdomen preset baked into that cache, so the default
+# --anatomy abdomen (hu-scale 400) makes the CHO/NPS detectability eval valid
+# here, exactly as in the real-CT sweeps.
+#
+# Grid = 5 models x 3 modes x 3 seeds = 45 runs.
+#
+# Deploy with the LEAN template (reads /data directly, no h5 copy / npy unpack):
+#   python sweep.py sweep_sim_ldct.yml --template k8s/tr_job_template_synth.yml --agents 3
+parameters:
+  model:
+    values:
+      - redcnn
+      - dncnn
+      - unet
+      - ctformer
+      - flowmatching
+
+  training-mode:
+    values:
+      - supervised
+      - n2v
+      - n2sim
+
+  epochs:
+    value: 50
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # --- GPU throughput (match the CT sweeps) ---
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+
+  # --- method-specific hyperparameters (used only by the matching mode) ---
+  n2v-mask-fraction:
+    value: 0.02
+  n2v-neighbor-radius:
+    value: 2
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  flow-steps:
+    value: 20
+  flow-steps-eval:
+    value: 5
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  # Simulate the low arm from the abdomen full-dose cache, read read-only off the
+  # PVC. A missing cache fails loudly; use --sim-procedural (not shown) to
+  # deliberately run on synthetic phantoms instead.
+  - --sim-ldct
+  - --sim-source=/data/ldct_abdomen.h5
+  - --sim-base-std=0.03
+  - --sim-signal-std=0.06
+  - --sim-correlation-sigma=1.0
+  - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability is valid here (real CT anatomy, abdomen window), so
+  # keep the det/* columns as in the real-CT sweeps.
+  - --eval-detectability
+  - --detectability-max-slices=200

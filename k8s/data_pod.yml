@@ -16,7 +16,7 @@ spec:
         - |
           set -euo pipefail
 
-          apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+          apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl tar && rm -rf /var/lib/apt/lists/*
           pip install --no-cache-dir tcia_utils pydicom pandas h5py numpy
 
           # Clone the repo and install the package once (the conversion +
@@ -140,7 +140,55 @@ spec:
             echo "OK: $H5_OUT ready."
           done
 
-          # 4. Final summary: confirm every requested cache opens and report its
+          # 4. Natural-image denoising set (for the --natural dataset). The
+          #    theorem is not CT-specific, so the natural-image sweeps stress it
+          #    on real images; BSDS500 is a small, standard clean-image corpus.
+          #    Images land as a flat dir of JPGs on the PVC -- the dataset reads
+          #    them read-only from /data and does its own grayscale + [0,1]
+          #    conversion, and its own patient-style train/val split. Idempotent:
+          #    a populated dir is left alone. A failed download is non-fatal --
+          #    the --natural sweeps can fall back to procedural images.
+          # Prepare the natural-image corpus unless explicitly skipped. A failed
+          # download is FATAL (not a silent skip): a half-ready PVC that looks
+          # fine but breaks a sweep later is worse than a loud failure here. This
+          # step runs only after every CT cache above is written and validated,
+          # and the pod is idempotent, so a re-run recovers cheaply. CT-only
+          # users set PREP_NATURAL=false to opt out entirely.
+          export PREP_NATURAL="${PREP_NATURAL:-true}"
+          NATURAL_DIR=/data/natural_images
+          echo ""
+          echo "================ natural images (BSDS500) ================"
+          if [ "$PREP_NATURAL" != "true" ]; then
+            echo "PREP_NATURAL=$PREP_NATURAL -- skipping natural-image prep (opt-out)."
+          elif [ -d "$NATURAL_DIR" ] && [ -n "$(ls -A "$NATURAL_DIR" 2>/dev/null)" ]; then
+            echo "Natural images already present at $NATURAL_DIR ($(ls "$NATURAL_DIR" | wc -l) files), skipping."
+          else
+            BSDS_URL="https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/BSR/BSR_bsds500.tgz"
+            mkdir -p /tmp/bsds
+            if ! curl -fsSL -o /tmp/bsds/BSR.tgz "$BSDS_URL"; then
+              echo "ERROR: BSDS500 download failed ($BSDS_URL)." >&2
+              echo "  Fix the source and re-run (CT caches above are already done)," >&2
+              echo "  or set PREP_NATURAL=false to prepare only the CT caches." >&2
+              exit 1
+            fi
+            tar -xzf /tmp/bsds/BSR.tgz -C /tmp/bsds
+            mkdir -p "$NATURAL_DIR"
+            find /tmp/bsds/BSR/BSDS500/data/images -name '*.jpg' -exec cp {} "$NATURAL_DIR"/ \;
+            n_imgs="$(ls "$NATURAL_DIR" | wc -l)"
+            if [ "$n_imgs" -eq 0 ]; then
+              echo "ERROR: BSDS500 extracted but no .jpg images were found." >&2
+              exit 1
+            fi
+            echo "Natural images ready: $n_imgs files in $NATURAL_DIR"
+            rm -rf /tmp/bsds
+          fi
+
+          # Note: the simulated low-dose CT dataset (--sim-ldct) needs NO extra
+          # download -- it manufactures the low arm from the full-dose volumes in
+          # the abdomen cache, so sweep_sim_ldct.yml reads /data/ldct_abdomen.h5
+          # directly. Make sure "abdomen" is in ANATOMIES above (it is by default).
+
+          # 5. Final summary: confirm every requested cache opens and report its
           #    patient count / size, then show the PVC state the sweeps consume.
           echo ""
           echo "=== All caches ready -- /data ==="
@@ -154,6 +202,9 @@ spec:
           print(f'  {p}: {len(pts)} patients, {os.path.getsize(p)/1e6:.1f} MB')
           "
           done
+          if [ -d "$NATURAL_DIR" ]; then
+            echo "  $NATURAL_DIR: $(ls "$NATURAL_DIR" 2>/dev/null | wc -l) natural images"
+          fi
           ls -lah /data/
       volumeMounts:
         - name: workspace
