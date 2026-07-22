@@ -1,0 +1,70 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Flow-vs-regression on NATURAL images -- the REGRESSION arm.
+#
+# Mirror of sweep_flow_vs_reg.yml but on the --natural dataset with i.i.d.
+# gaussian noise (the regime the closed-form finite-step theorem is exact in).
+# A direct Noise2Sim regressor (RED-CNN) trained on decorrelated pairs, swept
+# over the same exclude-radius grid, so it overlays cell-for-cell with the flow
+# arm in sweep_natural_hallucination.yml. Together they test whether "one-step
+# flow ties regression" holds off CT data.
+#
+# Grid = 3 exclude-radius x 3 seeds = 9 runs.
+#
+# Deploy with the lean template:
+#   python sweep.py sweep_natural_flow_vs_reg.yml --template k8s/tr_job_template_synth.yml --agents 3
+parameters:
+  model:
+    value: redcnn
+  training-mode:
+    value: n2sim
+
+  noise-mode:
+    value: gaussian
+
+  epochs:
+    value: 50
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  # The decorrelation knob -- matches the flow arm's ssflow-exclude-radius grid.
+  n2sim-exclude-radius:
+    values:
+      - 1
+      - 2
+      - 3
+
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+  samples-per-image:
+    value: 8
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --natural
+  - --natural-root=/data/natural_images
+  - --noise-std=0.1
+  - --wandb-project=ctdenoiser-sweep

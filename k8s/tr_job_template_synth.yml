@@ -1,0 +1,137 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ctdenoiser-sweep
+  namespace: usd-djha
+  labels:
+    app: wandb-sweep
+    user: timgsereda
+spec:
+  completions: 1
+  parallelism: 1
+  completionMode: Indexed
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: wandb-sweep
+        user: timgsereda
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: PreferNoSchedule
+      containers:
+        - name: sweep-agent
+          image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+          resources:
+            requests:
+              cpu: "8"
+              memory: "16Gi"
+              nvidia.com/a100: "1"
+            limits:
+              cpu: "12"
+              memory: "32Gi"
+              nvidia.com/a100: "1"
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            - name: WANDB_PROJECT
+              value: ctdenoiser-sweep
+            - name: WANDB_ENTITY
+              value: timgsereda
+            # Same GPU-packing story as the CT template: small models on 64px
+            # patches are launch-bound (~30% util each), so pack several agents
+            # onto the one A100. The natural / simulated datasets hold their data
+            # in process RAM (no per-agent copy of a multi-GB h5), so memory is
+            # not the cap here -- 3 is comfortable.
+            - name: AGENTS_PER_GPU
+              value: "3"
+            # PyTorch sizes its thread pool from the host core count, not the
+            # pod's CPU request; pin the math libs to 1 thread so packed agents
+            # stay inside the cgroup CPU quota (GPU work is unaffected).
+            - name: OMP_NUM_THREADS
+              value: "1"
+            - name: MKL_NUM_THREADS
+              value: "1"
+            - name: OPENBLAS_NUM_THREADS
+              value: "1"
+            # utility capability injects nvidia-cuda-mps-control so MPS can engage.
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            # Read-only: the natural-image dir and the full-dose h5 the simulated
+            # LDCT arm draws from are read straight off the PVC. Both datasets
+            # load their inputs into process RAM once at init, so there is no
+            # per-epoch PVC I/O to optimise with a local copy -- hence no cp /
+            # npy-unpack step (the CT template's --mmap-cache machinery).
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          args:
+            - |
+              set -e
+
+              apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
+              pip install wandb matplotlib h5py pillow
+
+              git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
+              cd /workspace/ctdenoiser
+              pip install -e ".[h5]"
+
+              # Periodic GPU/CPU telemetry in the pod log (same as the CT template)
+              # so a utilisation dip is diagnosable from `kubectl logs` after the fact.
+              ( while true; do
+                  nvidia-smi --query-gpu=utilization.gpu,utilization.memory,memory.used --format=csv,noheader 2>/dev/null \
+                    | sed "s/^/[gpu-util $(date -u +%H:%M:%S)] /"
+                  sleep 300
+                done ) &
+
+              # NVIDIA MPS: let the packed agents share the GPU's SMs concurrently
+              # rather than time-slicing. Best-effort -- fall back to time-slicing
+              # if the control binary is absent.
+              export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps
+              export CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-mps-log
+              mkdir -p "$CUDA_MPS_PIPE_DIRECTORY" "$CUDA_MPS_LOG_DIRECTORY"
+              if command -v nvidia-cuda-mps-control >/dev/null 2>&1; then
+                nvidia-cuda-mps-control -d && echo "MPS daemon started (concurrent GPU sharing)" \
+                  || echo "MPS start failed; continuing time-sliced"
+              else
+                echo "nvidia-cuda-mps-control not found; continuing time-sliced (no MPS)"
+              fi
+
+              # Pack N sweep agents onto this pod's single A100 (see AGENTS_PER_GPU).
+              # The clone / install above happen once and are shared by all N; each
+              # agent reads its dataset directly from the read-only /data mount.
+              N="${AGENTS_PER_GPU:-1}"
+              echo "launching $N sweep agent(s) on this GPU"
+              pids=""
+              for i in $(seq 1 "$N"); do
+                wandb agent timgsereda/ctdenoiser-sweep/SWEEP_ID &
+                pids="$pids $!"
+              done
+              # Exit non-zero if any agent fails, so the Job/backoff sees it.
+              rc=0
+              for p in $pids; do wait "$p" || rc=1; done
+              exit $rc
+          command: ["/bin/bash", "-c"]
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 50Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: ctdenoiser
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi

@@ -1,0 +1,97 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Natural-image denoising benchmark -- the theorem generalised beyond CT.
+#
+# Same model x training-mode grid as the main CT sweep (sweep.yml), but on the
+# --natural dataset: clean images (BSDS500 on the PVC) + synthetic noise, run in
+# BOTH noise regimes (i.i.d. gaussian and spatially-correlated) via the
+# noise-mode axis. Shows one-step flow = regression and the self-supervised
+# leads outside CT, elevating the result from "a CT finding" to a general
+# denoising one.
+#
+# Grid = 5 models x 3 modes x 3 seeds x 2 noise-modes = 90 runs. To trim: drop a
+# seed, or split the two noise regimes into separate launches (edit noise-mode
+# to a single value). The flowmatching+n2v/n2sim -> unconditional-SSFlow
+# special-case in train.py is dataset-agnostic, so it applies here too.
+#
+# Deploy with the LEAN template (reads /data directly, no h5 copy):
+#   python sweep.py sweep_natural.yml --template k8s/tr_job_template_synth.yml --agents 3
+parameters:
+  model:
+    values:
+      - redcnn
+      - dncnn
+      - unet
+      - ctformer
+      - flowmatching
+
+  training-mode:
+    values:
+      - supervised
+      - n2v
+      - n2sim
+
+  # The two noise regimes the theorem is meant to hold across.
+  noise-mode:
+    values:
+      - gaussian
+      - correlated
+
+  epochs:
+    value: 50
+
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # --- GPU throughput (match the CT sweeps so runtimes are comparable) ---
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+  # Random patches drawn per image each epoch: BSDS500 has ~500 images, so 8
+  # patches/image keeps the effective epoch size in the low thousands.
+  samples-per-image:
+    value: 8
+
+  # --- method-specific hyperparameters (used only by the matching mode) ---
+  n2v-mask-fraction:
+    value: 0.02
+  n2v-neighbor-radius:
+    value: 2
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  flow-steps:
+    value: 20
+  flow-steps-eval:
+    value: 5
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  # Read the clean-image corpus straight off the read-only PVC mount. Omit this
+  # flag to fall back to the self-contained procedural image set.
+  - --natural
+  - --natural-root=/data/natural_images
+  - --noise-std=0.1
+  - --correlation-sigma=1.5
+  - --wandb-project=ctdenoiser-sweep
+  # No --eval-detectability: the CHO/NPS task-based eval inserts CT lesions in HU
+  # units and is meaningless for natural images. PSNR/SSIM/RMSE/GMSD carry the
+  # comparison here.
