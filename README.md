@@ -155,27 +155,33 @@ silently mis-pairing.
 
 ### Per-anatomy benchmark workflow
 
-The data pod prepares **every** anatomy cache in a single run: for each anatomy
-it downloads the cohort and writes a self-describing cache
-`/data/ldct_<anatomy>.h5` (window baked in, anatomy stored in the file attrs),
-validating each before moving on. Run the pod **once** and all caches are ready;
-sweep any of them anytime — caches coexist on the PVC:
+The data pod prepares each anatomy cache in a single run: for each anatomy it
+downloads the cohort and writes a self-describing cache `/data/ldct_<anatomy>.h5`
+(window baked in, anatomy stored in the file attrs), validating each before
+moving on. Run the pod **once** and the caches are ready; sweep any of them
+anytime — caches coexist on the PVC:
 
 ```bash
-# 1. one data-pod run -> ldct_abdomen.h5, ldct_chest.h5, ldct_head.h5
+# 1. one data-pod run -> ldct_abdomen.h5, ldct_chest.h5 (+ /data/natural_images)
 #    Idempotent: a valid cache is skipped on re-run, and a missing/corrupt one
 #    is re-converted (so an interrupted earlier run self-heals). Override the
-#    set with ANATOMIES, e.g. ANATOMIES="abdomen chest" for a subset.
+#    set with ANATOMIES, e.g. ANATOMIES="abdomen" for a subset.
 kubectl apply -f k8s/data_pod.yml -n usd-djha
 
 # 2. one sweep per anatomy (picks /data/ldct_<anatomy>.h5)
 python sweep.py sweep.yml --anatomy abdomen --agents 8
 python sweep.py sweep.yml --anatomy chest   --agents 8
-python sweep.py sweep.yml --anatomy head    --agents 8
 
-# 3. one merged dashboard across all three (anatomy column carries through)
-python scripts/benchmark_report.py abdomen.csv chest.csv head.csv --out report.html
+# 3. one merged dashboard (anatomy column carries through)
+python scripts/benchmark_report.py abdomen.csv chest.csv --out report.html
 ```
+
+> **`head` is not in the default `ANATOMIES`.** The `LDCT-and-Projection-data`
+> query for `BodyPartExamined=HEAD` returns 0 paired Low/Full-dose patients, so
+> it never produced a cache. Add it back (`ANATOMIES="abdomen chest head"`) to
+> re-check — the download step now prints the collection's real body-part labels
+> when a cohort comes back empty, so a label mismatch is distinguishable from a
+> genuine absence.
 
 `--h5-name` targets an explicit cache filename (e.g. a legacy
 `ldct_preprocessed.h5`). All runs can share one W&B project — each carries its
