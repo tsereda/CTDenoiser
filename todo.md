@@ -35,22 +35,30 @@ Figure rendered → `figures/steps_departure_natural.pdf`.
 fig:steps) and `figures/detectability.pdf`. Only `figure_qualitative.py` remains
 (needs checkpoints on the cluster).
 
-## NEXT — the pairing arm (completes the cross-domain claim)
+## DONE ✓ — pairing arm: one-step flow TIES regression (sweep `k4e2m06c`)
 
-```bash
-# regression arm — confirms one-step flow TIES regression on natural images
-python sweep.py sweep_natural_flow_vs_reg.yml --template k8s/tr_job_template_synth.yml --agents 3
-```
-Wait for the previous Job to finish first (same `ctdenoiser-sweep` name), or use a
-separate namespace. Then re-run `figure_steps.py` with `--regression-ref <best>` so
-the natural figure gets its dashed one-step-regression line like the CT one.
+Direct RED-CNN regressor on the same similarity pairs. One-step flow ties the
+regressor at every r (regression marginally ahead, the finite-capacity residual —
+same as CT):
 
-## Then — after each finishes
+| r | flow 1-step | regression | gap |
+|---|-------------|------------|-----|
+| 1 | +3.91 | +4.12 | +0.21 |
+| 2 | +3.90 | +4.09 | +0.19 |
+| 3 | +4.05 | +4.20 | +0.15 |
 
-- [ ] Export CSV → `results/` (`natural_flow_vs_reg_gaussian.csv`, etc.).
-      `python scripts/benchmark_report.py --wandb timgsereda/ctdenoiser-sweep/sweeps/<ID>`
-- [ ] Draft the cross-domain results paragraph + table in `paper/main.tex`
-      (edit #3 from the review — the empirical answer to "Gaussian-only" / "CT-specific").
+Export → `results/natural_flow_vs_reg_gaussian.csv`. Natural steps figure
+re-rendered with the regression reference line (`--regression-ref 4.09`).
+
+## DONE ✓ — cross-domain claim written into the paper
+
+Both halves now hold off CT. Added to `paper/main.tex`: a "The result is not
+CT-specific" paragraph + `tab:natural` in the theorem section, and Limitations
+updated (theorem now has cross-domain empirical support; abdomen-only caveat
+scoped to the clinical numbers). **Needs a local `pdflatex` build to eyeball.**
+
+## Then — breadth (optional, if GPU/time before 7/28)
+
 - [ ] Run the other two sweeps:
   - [ ] `sweep_sim_ldct.yml` (45 runs) — clinical robustness on simulated LDCT
         (reuses `ldct_abdomen.h5`; keeps `--eval-detectability`).
