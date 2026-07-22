@@ -77,7 +77,8 @@ command:
   - ctdenoiser.train
   - ${args}
   # Simulate the low arm from the abdomen full-dose cache, read read-only off the
-  # PVC. Omit --sim-source to fall back to self-contained procedural phantoms.
+  # PVC. A missing cache fails loudly; use --sim-procedural (not shown) to
+  # deliberately run on synthetic phantoms instead.
   - --sim-ldct
   - --sim-source=/data/ldct_abdomen.h5
   - --sim-base-std=0.03

@@ -85,8 +85,9 @@ command:
   - -m
   - ctdenoiser.train
   - ${args}
-  # Read the clean-image corpus straight off the read-only PVC mount. Omit this
-  # flag to fall back to the self-contained procedural image set.
+  # Read the clean-image corpus straight off the read-only PVC mount. An empty /
+  # missing dir fails loudly at load; use --natural-procedural (not shown) to
+  # deliberately run on synthetic images instead.
   - --natural
   - --natural-root=/data/natural_images
   - --noise-std=0.1

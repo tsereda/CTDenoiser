@@ -148,24 +148,39 @@ spec:
           #    conversion, and its own patient-style train/val split. Idempotent:
           #    a populated dir is left alone. A failed download is non-fatal --
           #    the --natural sweeps can fall back to procedural images.
+          # Prepare the natural-image corpus unless explicitly skipped. A failed
+          # download is FATAL (not a silent skip): a half-ready PVC that looks
+          # fine but breaks a sweep later is worse than a loud failure here. This
+          # step runs only after every CT cache above is written and validated,
+          # and the pod is idempotent, so a re-run recovers cheaply. CT-only
+          # users set PREP_NATURAL=false to opt out entirely.
+          export PREP_NATURAL="${PREP_NATURAL:-true}"
           NATURAL_DIR=/data/natural_images
           echo ""
           echo "================ natural images (BSDS500) ================"
-          if [ -d "$NATURAL_DIR" ] && [ -n "$(ls -A "$NATURAL_DIR" 2>/dev/null)" ]; then
+          if [ "$PREP_NATURAL" != "true" ]; then
+            echo "PREP_NATURAL=$PREP_NATURAL -- skipping natural-image prep (opt-out)."
+          elif [ -d "$NATURAL_DIR" ] && [ -n "$(ls -A "$NATURAL_DIR" 2>/dev/null)" ]; then
             echo "Natural images already present at $NATURAL_DIR ($(ls "$NATURAL_DIR" | wc -l) files), skipping."
           else
             BSDS_URL="https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/BSR/BSR_bsds500.tgz"
             mkdir -p /tmp/bsds
-            if curl -fsSL -o /tmp/bsds/BSR.tgz "$BSDS_URL"; then
-              tar -xzf /tmp/bsds/BSR.tgz -C /tmp/bsds
-              mkdir -p "$NATURAL_DIR"
-              find /tmp/bsds/BSR/BSDS500/data/images -name '*.jpg' -exec cp {} "$NATURAL_DIR"/ \;
-              echo "Natural images ready: $(ls "$NATURAL_DIR" | wc -l) files in $NATURAL_DIR"
-              rm -rf /tmp/bsds
-            else
-              echo "WARNING: BSDS500 download failed ($BSDS_URL)."
-              echo "  --natural sweeps can still run with procedural images (omit --natural-root)."
+            if ! curl -fsSL -o /tmp/bsds/BSR.tgz "$BSDS_URL"; then
+              echo "ERROR: BSDS500 download failed ($BSDS_URL)." >&2
+              echo "  Fix the source and re-run (CT caches above are already done)," >&2
+              echo "  or set PREP_NATURAL=false to prepare only the CT caches." >&2
+              exit 1
             fi
+            tar -xzf /tmp/bsds/BSR.tgz -C /tmp/bsds
+            mkdir -p "$NATURAL_DIR"
+            find /tmp/bsds/BSR/BSDS500/data/images -name '*.jpg' -exec cp {} "$NATURAL_DIR"/ \;
+            n_imgs="$(ls "$NATURAL_DIR" | wc -l)"
+            if [ "$n_imgs" -eq 0 ]; then
+              echo "ERROR: BSDS500 extracted but no .jpg images were found." >&2
+              exit 1
+            fi
+            echo "Natural images ready: $n_imgs files in $NATURAL_DIR"
+            rm -rf /tmp/bsds
           fi
 
           # Note: the simulated low-dose CT dataset (--sim-ldct) needs NO extra

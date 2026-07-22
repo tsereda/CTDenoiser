@@ -230,11 +230,13 @@ python -m ctdenoiser.train --model dncnn --natural --natural-root /data/bsd \
 ```
 
 `--natural-root` is a directory of clean grayscale images (any PIL-readable
-files). Omit it to generate a deterministic **procedural** image set so the
-dataset runs self-contained (tests / smoke runs, no download):
+files). `--natural` **requires** either `--natural-root` or, to deliberately run
+on a deterministic **procedural** image set (tests / smoke runs, no download),
+the explicit `--natural-procedural` — there is no silent fallback, so a mistyped
+or missing root fails loudly instead of quietly training on synthetic data:
 
 ```bash
-python -m ctdenoiser.train --model dncnn --natural --natural-len 256 --epochs 1
+python -m ctdenoiser.train --model dncnn --natural --natural-procedural --epochs 1
 ```
 
 | flag | meaning |
@@ -259,13 +261,14 @@ python -m ctdenoiser.train --model redcnn --sim-ldct \
     --epochs 50
 
 # procedural CT phantoms (self-contained smoke run)
-python -m ctdenoiser.train --model redcnn --sim-ldct --sim-patients 8 --epochs 1
+python -m ctdenoiser.train --model redcnn --sim-ldct --sim-procedural --sim-patients 8 --epochs 1
 ```
 
-`--sim-source` reuses a `scripts/convert_dicom_to_h5.py` cache (reads its
-`/patients/{id}/full` volumes); omit it for procedural phantoms. `--pair-mode
-noisy` yields two independent simulated low-dose views (Noise2Noise) instead of
-the clean target.
+`--sim-ldct` **requires** either `--sim-source` (a
+`scripts/convert_dicom_to_h5.py` cache, read from its `/patients/{id}/full`
+volumes) or the explicit `--sim-procedural` for phantoms — no silent fallback.
+`--pair-mode noisy` yields two independent simulated low-dose views
+(Noise2Noise) instead of the clean target.
 
 ## Benchmark report
 
