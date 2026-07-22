@@ -844,6 +844,48 @@ Section~\ref{sec:detect}---loses nothing on detectability, but a generative flow
 can still win on perceptual or radiomic-feature metrics that reward texture over
 fidelity, which we do not claim to optimise.
 
+\paragraph{The result is not CT-specific.}
+The proposition of Section~\ref{sec:rf-n2n} assumes only signal-conditional
+independence and an $L_2$ objective---nothing about CT---so both halves should
+hold on any Noise2Noise problem.  We check this on a non-medical, i.i.d.-noise
+setting: BSDS500 natural images corrupted with white Gaussian noise
+($\sigma{=}0.1$), same SSFlow model, same $3$-seed exclude-radius grid
+(Table~\ref{tab:natural}).  Both predictions reproduce.  \emph{(i)} One-step
+flow ties the direct regressor at every $r$ (within $0.15$--$0.21$\,dB, the same
+small residual favouring regression as on CT).  \emph{(ii)} Multi-step Euler
+integration erodes PSNR \emph{monotonically}, $+3.9\!\to\!+1.3$\,dB over
+$1/4/8/20$ steps---a \emph{steeper} fall than on CT, as expected when the
+one-step gain is larger.  \emph{(iii)} Consistent with $r$ being the
+\emph{correlated}-noise knob, the exclusion radius barely matters here
+($\le0.1$\,dB across $r$): i.i.d.\ noise has no spatial correlation for a larger
+$r$ to break, exactly as the FBP-correlation account predicts.  The
+finite-step-departure result and one-step optimality are therefore properties of
+the Noise2Noise objective, not of CT.
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{\textbf{The result generalises beyond CT} (BSDS500 natural images,
+           white Gaussian noise $\sigma{=}0.1$; $\Delta$PSNR over the noisy input,
+           mean over $3$ seeds).  One-step flow ties the direct regressor at every
+           decorrelation radius $r$, and multi-step Euler integration erodes PSNR
+           monotonically---the same two findings as on CT
+           (Table~\ref{tab:flow-vs-reg}), now off the medical domain and under
+           i.i.d.\ noise, where $r$ (the correlated-noise knob) is inert.}
+  \label{tab:natural}
+  \begin{tabular}{ccccccc}
+    \toprule
+    & \multicolumn{2}{c}{one-step $\Delta$PSNR} & \multicolumn{4}{c}{flow, Euler steps} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-7}
+    $r$ & flow & regression & $1$ & $4$ & $8$ & $20$ \\
+    \midrule
+    $1$ & $+3.91$ & $+4.12$ & $+3.91$ & $+1.94$ & $+1.59$ & $+1.37$ \\
+    $2$ & $+3.90$ & $+4.09$ & $+3.90$ & $+1.89$ & $+1.52$ & $+1.30$ \\
+    $3$ & $+4.05$ & $+4.20$ & $+4.05$ & $+1.92$ & $+1.54$ & $+1.30$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 \begin{figure*}[t]
   \centering
   \IfFileExists{figures/steps_departure.pdf}{%
@@ -999,14 +1041,20 @@ CT-denoising work report task-based $d'$ alongside the five metrics in
 Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
-The evaluation is $3$-seed and patient-level but on the abdomen window only;
-multi-anatomy runs (chest, head) are the primary remaining generalisation check.
+The \emph{clinical} evaluation---the benchmark and the detectability study---is
+$3$-seed and patient-level but on the abdomen window only; a second anatomy is the
+primary remaining check for the CT-specific numbers.  The \emph{theoretical}
+claim is less domain-bound: the one-step-optimality and finite-step-departure
+findings reproduce on natural images under i.i.d.\ Gaussian noise
+(Table~\ref{tab:natural}), so they are not artefacts of CT or of correlated noise.
 The per-image methods (ZS-N2N, Filter2Noise) are reported single-split
 (Appendix~\ref{app:supp-tables}); their $3$-seed and detectability numbers are
 omitted because each CHO realisation would retrain their per-image network
 thousands of times.  The finite-step departure result
-(Section~\ref{sec:ss-pairs}) is exact in the jointly-Gaussian model; a bound for
-the general finite-capacity, finite-step case is left open.  Detectability is
+(Section~\ref{sec:ss-pairs}) is proved exactly only in the jointly-Gaussian model;
+a bound for the general finite-capacity, finite-step case is left open, though the
+CT and natural-image experiments both exhibit the predicted monotone erosion
+outside that model's assumptions.  Detectability is
 reported for the deterministic denoisers and, through the fabrication-vs-steps
 pass, for the generative SSFlow; a broader hallucination analysis of generative
 CT denoisers is a natural extension.
