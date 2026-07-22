@@ -66,6 +66,3 @@ the natural figure gets its dashed one-step-regression line like the CT one.
       data sits under a different label.
 - [ ] Extend the figure scripts (`scripts/figure_*.py`) to render the natural /
       sim-ldct facets alongside the CT results.
-- [ ] FYI for the separate-namespace plan: the k8s manifests hardcode
-      `namespace: usd-djha` and the PVC `ctdenoiser` (namespace-scoped) — a job in
-      another namespace needs that same PVC available there.
