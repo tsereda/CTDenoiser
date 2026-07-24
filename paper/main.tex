@@ -1005,6 +1005,75 @@ Table~\ref{tab:sweep-periimage}.
   \end{tabular}
 \end{table*}
 
+\subsection{Robustness to a second LDCT source}
+\label{sec:sim-ldct}
+The main benchmark (Table~\ref{tab:results}) draws its low-dose arm from one real
+acquisition.  To check that the supervision-regime ordering is a property of
+correlated LDCT noise rather than of that single acquisition, we re-run the same
+architecture\,$\times$\,supervision grid on an independent low-dose source
+(\texttt{sweep\_sim\_ldct.yml}): the low-dose images are \emph{simulated} from the
+same abdomen full-dose volumes with a correlated, signal-dependent noise model
+(\texttt{-{}-sim-base-std=0.03}, \texttt{-{}-sim-signal-std=0.06}), giving a
+harsher $28.3$\,dB input floor (vs.\ $30.25$\,dB real).  Everything else---patient
+splits, patch size, optimiser, seeds, epochs---is held fixed.
+
+The regime ordering reproduces on the second source
+(Table~\ref{tab:sim-ldct}): supervised denoising gains $\sim$$4.5$--$4.9$\,dB with
+the three CNNs again within $0.4$\,dB of one another; among label-free methods
+Noise2Sim is the \emph{only} one that clears the noisy floor at every backbone,
+while blind-spot Noise2Void is flat-to-negative ($-0.09$ to $+0.04$\,dB).  The
+qualitative story is therefore source-independent.  Two magnitudes shift with the
+noise model, in the direction the mechanism predicts: Noise2Sim's margin
+\emph{compresses} to $+0.9$\,dB (from $+1.8$\,dB on the real source), because the
+simulated field is more nearly stationary and leaves the similarity search less
+correlation structure to exploit; and Noise2Void moves toward---rather than
+below---the floor, as a milder correlation length lessens (without removing) its
+pixel-independence violation.  The ordering is robust; the label-free margin is
+source-dependent, which we report rather than average away.
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{\textbf{Robustness to a second LDCT source} (\texttt{sweep\_sim\_ldct.yml}):
+           the Table~\ref{tab:results} grid re-run with the low-dose arm
+           \emph{simulated} from the abdomen full-dose volumes (correlated,
+           signal-dependent noise; $3$ seeds, $50$ epochs, matched splits).  PSNR
+           gives the absolute value with the gain over the $28.26$\,dB simulated
+           input floor in parentheses.  The supervision-regime ordering matches the
+           real-source benchmark---supervised $\sim$$4.5$--$4.9$\,dB, Noise2Sim the
+           only label-free method above the floor, Noise2Void flat-to-negative---so
+           it is not an artefact of one acquisition; the label-free margin
+           compresses under the more stationary simulated noise.  \textbf{Bold}:
+           best $\Delta$PSNR per supervision block.  $^{\dagger}$CTformer is a
+           single-seed provisional entry and CFM is pending; both complete when the
+           sweep finishes.  $\uparrow$/$\downarrow$: higher/lower is better.}
+  \label{tab:sim-ldct}
+  \begin{tabular}{llrccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
+    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
+    \midrule
+    Simulated LDCT input & --- (no denoising) & --- & $28.26$ & $0.597$ & $0.0388$ & $0.418$ & $0.0153$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{33.17 \,($+4.91{\pm}0.13$)} & $0.937$ & $0.0221$ & $0.169$ & $0.0050$ \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 32.90 \,($+4.64{\pm}0.14$) & $0.934$ & $0.0228$ & $0.222$ & $0.0053$ \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 32.78 \,($+4.52{\pm}0.11$) & $0.933$ & $0.0231$ & $0.222$ & $0.0055$ \\
+    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 30.23 \,($+1.99$) & $0.855$ & $0.0309$ & $0.363$ & $0.0098$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & \textbf{29.22 \,($+0.96{\pm}0.07$)} & $0.706$ & $0.0347$ & $0.409$ & $0.0123$ \\
+    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 29.19 \,($+0.93{\pm}0.05$) & $0.673$ & $0.0348$ & $0.384$ & $0.0124$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 29.11 \,($+0.85{\pm}0.05$) & $0.667$ & $0.0351$ & $0.395$ & $0.0126$ \\
+    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 28.92 \,($+0.68$) & $0.806$ & $0.0359$ & $0.352$ & $0.0133$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{28.30 \,($+0.04{\pm}0.09$)} & $0.643$ & $0.0386$ & $0.398$ & $0.0152$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 28.24 \,($-0.02{\pm}0.04$) & $0.627$ & $0.0389$ & $0.390$ & $0.0154$ \\
+    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 28.17 \,($-0.09{\pm}0.08$) & $0.646$ & $0.0391$ & $0.381$ & $0.0157$ \\
+    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 28.04 \,($-0.20$) & $0.723$ & $0.0397$ & $0.342$ & $0.0163$ \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
 % -----------------------------------------------------------------------
 \section{Discussion}
 
@@ -1043,7 +1112,9 @@ Table~\ref{tab:results}.
 \paragraph{Limitations.}
 The \emph{clinical} evaluation---the benchmark and the detectability study---is
 $3$-seed and patient-level but on the abdomen window only; a second anatomy is the
-primary remaining check for the CT-specific numbers.  The \emph{theoretical}
+primary remaining check for the CT-specific numbers, though the
+supervision-regime ordering already reproduces on an independent, simulated
+low-dose source of the same anatomy (Table~\ref{tab:sim-ldct}).  The \emph{theoretical}
 claim is less domain-bound: the one-step-optimality and finite-step-departure
 findings reproduce on natural images under i.i.d.\ Gaussian noise
 (Table~\ref{tab:natural}), so they are not artefacts of CT or of correlated noise.
