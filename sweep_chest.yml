@@ -1,0 +1,85 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Second-anatomy robustness pass: the main benchmark grid (sweep.yml) on the
+# CHEST cache instead of abdomen. Launch with the anatomy flag so sweep.py points
+# the job at /data/ldct_chest.h5:
+#
+#   python sweep.py sweep_chest.yml --anatomy chest --agents 8
+#
+# SINGLE SEED by design. Chest is ~10 patients (vs 50 abdomen), so this is a
+# fast "does the supervision-regime ordering hold on a second anatomy?" check,
+# not the 3-seed significance table. Grid = 5 models x 3 modes x 1 seed = 15 runs
+# (~an afternoon on 8 agents; CTformer + flow are the long poles). Promote to the
+# 3-seed sweep.yml on chest only if the ordering holds and a reviewer needs bars.
+#
+# One combination is special-cased by train.py:
+#   * flowmatching + n2v/n2sim -> trains the *unconditional* self-supervised flow
+#                            (ctdenoiser.models.ssflow) with the mode's target as
+#                            the flow endpoint.
+parameters:
+  model:
+    values:
+      - redcnn
+      - dncnn
+      - unet
+      - ctformer
+      - flowmatching
+
+  training-mode:
+    values:
+      - supervised   # clean-target MSE / flow-matching loss
+      - n2v          # Noise2Void blind-spot self-supervision
+      - n2sim        # Noise2Sim similarity-based self-supervision
+
+  epochs:
+    value: 50
+
+  # --- GPU utilisation / throughput (see sweep.yml for the rationale) ------
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+
+  # Single seed: this is the fast ordering check, not the significance table.
+  # Add seeds (mirror sweep.yml's [0, 1, 2]) only if a reviewer needs std bars.
+  seed:
+    values:
+      - 0
+
+  # --- method-specific hyperparameters (used only by the matching mode) ---
+  n2v-mask-fraction:
+    value: 0.02
+  n2v-neighbor-radius:
+    value: 2
+
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  flow-steps:
+    value: 20
+  flow-steps-eval:
+    value: 5
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --mmap-cache=/workspace/npy_cache
+  - --wandb-project=ctdenoiser-sweep
+  # Task-based detectability (CHO d' + corrected NPS) at the end of each run.
+  - --eval-detectability
+  - --detectability-max-slices=200
+  - --detectability-periimage-max-slices=25

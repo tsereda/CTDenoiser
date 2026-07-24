@@ -1032,6 +1032,17 @@ def main(argv=None):
                 print(f"  steps={k:2d}  psnr={q['psnr']:.3f}")
         model.num_steps = _orig_steps
 
+    # Persist the best checkpoint *before* finishing the run. Sweep pods mount an
+    # ephemeral /workspace (emptyDir), so this local .pt is discarded when the pod
+    # exits; logging it as a W&B artifact is what makes it retrievable afterwards
+    # (e.g. to build figures/qualitative.pdf without re-training). Save first so
+    # the file exists when we attach it, then finish the run.
+    ckpt_dir = Path(args.checkpoint_dir)
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    ckpt = ckpt_dir / f"{args.model}.pt"
+    torch.save(save_state, ckpt)
+    print(f"saved checkpoint -> {ckpt}")
+
     if _wb:
         # Headline summary: how far the best epoch beats the do-nothing floor.
         _wb.summary["val/psnr_gain"] = metrics["psnr"] - baseline["psnr"]
@@ -1040,13 +1051,21 @@ def main(argv=None):
             _wb.log({f"det/{k}": v for k, v in det.items()})
         if steps_curve:
             _wb.log(steps_curve)
+        # Upload the best checkpoint so it survives the ephemeral pod, named by
+        # model+mode so a later session can pull exactly the arm it wants to
+        # visualise. Guarded: an artifact-store hiccup must not fail a good run.
+        try:
+            art = _wandb.Artifact(
+                f"{args.model}-{args.training_mode}", type="model",
+                metadata={"model": args.model,
+                          "training_mode": args.training_mode,
+                          "seed": args.seed, "val_psnr": metrics["psnr"]},
+            )
+            art.add_file(str(ckpt))
+            _wb.log_artifact(art)
+        except Exception as e:  # noqa: BLE001
+            print(f"  (checkpoint artifact upload skipped: {e})")
         _wb.finish()
-
-    ckpt_dir = Path(args.checkpoint_dir)
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    ckpt = ckpt_dir / f"{args.model}.pt"
-    torch.save(save_state, ckpt)
-    print(f"saved checkpoint -> {ckpt}")
 
 
 if __name__ == "__main__":
