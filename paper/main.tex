@@ -1053,9 +1053,10 @@ source-dependent, which we report rather than average away.
            only label-free method above the floor, Noise2Void flat-to-negative---so
            it is not an artefact of one acquisition; the label-free margin
            compresses under the more stationary simulated noise.  \textbf{Bold}:
-           best $\Delta$PSNR per supervision block.  $^{\dagger}$CTformer is a
-           single-seed provisional entry and CFM is pending; both complete when the
-           sweep finishes.  $\uparrow$/$\downarrow$: higher/lower is better.}
+           best $\Delta$PSNR per supervision block.  $^{\dagger}$Two CTformer runs
+           crashed near convergence (epoch $47$--$49$), leaving supervised at
+           $2/3$ and Noise2Void at $1/3$ seeds (shown without s.d.); all other
+           cells are $3$ seeds.  $\uparrow$/$\downarrow$: higher/lower is better.}
   \label{tab:sim-ldct}
   \begin{tabular}{llrccccc}
     \toprule
@@ -1068,12 +1069,13 @@ source-dependent, which we report rather than average away.
     RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{33.17 \,($+4.91{\pm}0.13$)} & $0.937$ & $0.0221$ & $0.169$ & $0.0050$ \\
     DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 32.90 \,($+4.64{\pm}0.14$) & $0.934$ & $0.0228$ & $0.222$ & $0.0053$ \\
     U-Net                            & Supervised & $1.95\mathrm{M}$ & 32.78 \,($+4.52{\pm}0.11$) & $0.933$ & $0.0231$ & $0.222$ & $0.0055$ \\
-    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 30.23 \,($+1.99$) & $0.855$ & $0.0309$ & $0.363$ & $0.0098$ \\
+    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 30.22 \,($+1.96{\pm}0.04$) & $0.860$ & $0.0309$ & $0.361$ & $0.0098$ \\
+    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 31.07 \,($+2.81{\pm}0.17$) & $0.914$ & $0.0281$ & $0.226$ & $0.0081$ \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & \textbf{29.22 \,($+0.96{\pm}0.07$)} & $0.706$ & $0.0347$ & $0.409$ & $0.0123$ \\
     U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 29.19 \,($+0.93{\pm}0.05$) & $0.673$ & $0.0348$ & $0.384$ & $0.0124$ \\
     DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 29.11 \,($+0.85{\pm}0.05$) & $0.667$ & $0.0351$ & $0.395$ & $0.0126$ \\
-    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 28.92 \,($+0.68$) & $0.806$ & $0.0359$ & $0.352$ & $0.0133$ \\
+    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 28.81 \,($+0.55{\pm}0.09$) & $0.810$ & $0.0364$ & $0.346$ & $0.0135$ \\
     \midrule
     RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{28.30 \,($+0.04{\pm}0.09$)} & $0.643$ & $0.0386$ & $0.398$ & $0.0152$ \\
     DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 28.24 \,($-0.02{\pm}0.04$) & $0.627$ & $0.0389$ & $0.390$ & $0.0154$ \\

@@ -1,0 +1,101 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ctdenoiser-qualitative
+  namespace: usd-djha
+  labels:
+    app: ctdenoiser-figure
+    user: timgsereda
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: ctdenoiser-figure
+        user: timgsereda
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: PreferNoSchedule
+      containers:
+        - name: figure
+          image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+          resources:
+            requests:
+              cpu: "4"
+              memory: "12Gi"
+              nvidia.com/a100: "1"
+            limits:
+              cpu: "8"
+              memory: "24Gi"
+              nvidia.com/a100: "1"
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            - name: WANDB_PROJECT
+              value: ctdenoiser-sweep
+            - name: WANDB_ENTITY
+              value: timgsereda
+            # Which chest slice/ROI to render. Override in the job (or edit here)
+            # after eyeballing -- pick a slice with a low-contrast structure so the
+            # waxy over-smoothing and the multi-step SSFlow drift are visible.
+            - name: PATIENT
+              value: "L057"
+            - name: SLICE
+              value: "120"
+            - name: ROI
+              value: ""          # x,y,w,h ; empty -> centre 80x80
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: data
+              mountPath: /data
+              readOnly: true
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+
+              apt-get update && apt-get install -y --no-install-recommends git \
+                && rm -rf /var/lib/apt/lists/*
+              pip install wandb matplotlib h5py
+
+              # Chest cache from the PVC (read-only) into the local emptyDir.
+              echo "Copying chest data..."
+              cp /data/ldct_chest.h5 /workspace/data.h5
+
+              git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
+              cd /workspace/ctdenoiser
+              pip install -e .
+
+              # Render the single qualitative figure from the sweep's checkpoint
+              # artifacts (redcnn-supervised/-n2sim, flowmatching-n2sim).
+              H5=/workspace/data.h5 bash scripts/render_qualitative_chest.sh
+
+              # The pod is ephemeral, so ship the one PDF out as a W&B artifact
+              # (pull afterwards with:  wandb artifact get \
+              #   timgsereda/ctdenoiser-sweep/qualitative-figure:latest ).
+              python - <<'PY'
+              import wandb
+              run = wandb.init(project="ctdenoiser-sweep", job_type="figure",
+                               name="qualitative-render")
+              art = wandb.Artifact("qualitative-figure", type="figure")
+              art.add_file("figures/qualitative.pdf")
+              run.log_artifact(art)
+              run.finish()
+              print("uploaded qualitative-figure artifact")
+              PY
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: ctdenoiser
