@@ -1,0 +1,110 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ctdenoiser-render-abdomen
+  namespace: usd-djha
+  labels:
+    app: ctdenoiser-figure
+    user: timgsereda
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: ctdenoiser-figure
+        user: timgsereda
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: PreferNoSchedule
+      containers:
+        - name: render
+          image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+          resources:
+            requests:
+              cpu: "4"
+              memory: "12Gi"
+              nvidia.com/a100: "1"
+            limits:
+              cpu: "5"
+              memory: "14Gi"
+              nvidia.com/a100: "1"
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            # Re-render only -- pulls the checkpoints the figure job persisted, so
+            # iterate SLICE/ROI/PATIENT freely without retraining.
+            - name: PATIENT
+              value: "L004"
+            - name: SLICE
+              value: "50"
+            - name: ROI
+              value: ""
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: data
+              mountPath: /data
+              readOnly: true
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              apt-get update && apt-get install -y --no-install-recommends git \
+                && rm -rf /var/lib/apt/lists/*
+              pip install wandb matplotlib h5py
+
+              cp /data/ldct_abdomen.h5 /workspace/data.h5
+              git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
+              cd /workspace/ctdenoiser
+              pip install -e .
+
+              # Pull the three abdomen checkpoints the figure job persisted.
+              python - <<'PY'
+              import os, wandb
+              api = wandb.Api()
+              for n in ("redcnn-supervised-abdomen", "redcnn-n2sim-abdomen",
+                        "flowmatching-n2sim-abdomen"):
+                  d = api.artifact(f"timgsereda/ctdenoiser-sweep/{n}:latest",
+                                   type="model").download(root=f"ck/{n}")
+                  print(n, "->", os.path.join(d, os.listdir(d)[0]))
+              PY
+              SUP=$(ls ck/redcnn-supervised-abdomen/*.pt | head -1)
+              NSIM=$(ls ck/redcnn-n2sim-abdomen/*.pt | head -1)
+              FLOW=$(ls ck/flowmatching-n2sim-abdomen/*.pt | head -1)
+
+              python scripts/figure_qualitative.py \
+                --h5 /workspace/data.h5 --patient "$PATIENT" --slice "$SLICE" \
+                ${ROI:+--roi "$ROI"} \
+                --models \
+                  "LDCT input=input" \
+                  "Noise2Sim=redcnn:$NSIM" \
+                  "Supervised=redcnn:$SUP" \
+                  "SSFlow (1 step)=ssflow:$FLOW:1" \
+                  "SSFlow (20 step)=ssflow:$FLOW:20" \
+                  "Full dose=clean" \
+                --out figures/qualitative.pdf
+
+              python - <<'PY'
+              import wandb
+              run = wandb.init(project="ctdenoiser-sweep", job_type="figure",
+                               name="qualitative-abdomen-render")
+              art = wandb.Artifact("qualitative-figure-abdomen", type="figure")
+              art.add_file("figures/qualitative.pdf")
+              run.log_artifact(art); run.finish()
+              print("uploaded qualitative-figure-abdomen")
+              PY
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: ctdenoiser

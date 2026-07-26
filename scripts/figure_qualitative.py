@@ -52,6 +52,11 @@ def load_slice(h5_path: str, patient: str | None, sl: int):
         pid = patient if patient in pats else pats[0]
         if patient and patient not in pats:
             print(f"patient {patient!r} not found; using {pid}. available: {pats[:8]}...")
+        n = f[f"patients/{pid}/low"].shape[0]
+        if not 0 <= sl < n:
+            clamped = min(max(sl, 0), n - 1)
+            print(f"slice {sl} out of range [0,{n - 1}] for {pid}; using {clamped}")
+            sl = clamped
         low = f[f"patients/{pid}/low"][sl].astype("float32")
         full = f[f"patients/{pid}/full"][sl].astype("float32")
     return pid, low, full
