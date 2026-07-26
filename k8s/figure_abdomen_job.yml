@@ -51,9 +51,9 @@ spec:
             - name: EPOCHS
               value: "30"
             - name: PATIENT
-              value: "L067"     # canonical Mayo LDCT abdomen test patient
+              value: "L004"     # present in this abdomen cache (L067 is not)
             - name: SLICE
-              value: "120"
+              value: "50"        # clamped to the patient's range if too large
             - name: ROI
               value: ""          # x,y,w,h ; empty -> centre 80x80
           volumeMounts:
@@ -102,6 +102,25 @@ spec:
               train flowmatching n2sim /workspace/ck/flow-n2sim &
               wait
               echo "training done:"; ls -R /workspace/ck
+
+              # Persist the three checkpoints as artifacts BEFORE rendering, so a
+              # render hiccup (bad slice/ROI) never costs the training again.
+              # Anatomy-suffixed names -> no collision with the chest sweep's
+              # redcnn-* artifacts. Re-render cheaply later by pulling these.
+              python - <<'PY'
+              import wandb
+              run = wandb.init(project="ctdenoiser-sweep", job_type="ckpt",
+                               name="abdomen-figure-ckpts")
+              for name, path in [
+                  ("redcnn-supervised-abdomen", "/workspace/ck/redcnn-sup/redcnn.pt"),
+                  ("redcnn-n2sim-abdomen",      "/workspace/ck/redcnn-n2sim/redcnn.pt"),
+                  ("flowmatching-n2sim-abdomen","/workspace/ck/flow-n2sim/flowmatching.pt"),
+              ]:
+                  art = wandb.Artifact(name, type="model"); art.add_file(path)
+                  run.log_artifact(art)
+              run.finish()
+              print("persisted 3 abdomen checkpoints as artifacts")
+              PY
 
               # Render the 6-panel figure straight from the local checkpoints.
               python scripts/figure_qualitative.py \
