@@ -1,0 +1,138 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ctdenoiser-figure-abdomen
+  namespace: usd-djha
+  labels:
+    app: ctdenoiser-figure
+    user: timgsereda
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: ctdenoiser-figure
+        user: timgsereda
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: PreferNoSchedule
+      containers:
+        - name: figure
+          image: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+          resources:
+            requests:
+              cpu: "8"
+              memory: "16Gi"
+              nvidia.com/a100: "1"
+            limits:
+              cpu: "12"
+              memory: "32Gi"
+              nvidia.com/a100: "1"
+          env:
+            - name: WANDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wandb-secret
+                  key: api-key
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
+            - name: OMP_NUM_THREADS
+              value: "2"
+            # Fewer epochs than the benchmark: this is a *figure* run, not a
+            # metrics run -- the waxy over-smoothing and the multi-step SSFlow
+            # drift are well-formed before full convergence. Bump if the drift
+            # still reads faint. Abdomen (~30 dB floor) shows it far better than
+            # the clean chest cache (~40 dB) did.
+            - name: EPOCHS
+              value: "30"
+            - name: PATIENT
+              value: "L067"     # canonical Mayo LDCT abdomen test patient
+            - name: SLICE
+              value: "120"
+            - name: ROI
+              value: ""          # x,y,w,h ; empty -> centre 80x80
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+
+              apt-get update && apt-get install -y --no-install-recommends git \
+                && rm -rf /var/lib/apt/lists/*
+              pip install wandb matplotlib h5py
+
+              echo "Copying abdomen data..."
+              cp /data/ldct_abdomen.h5 /workspace/data.h5
+
+              git clone https://github.com/tsereda/ctdenoiser.git /workspace/ctdenoiser
+              cd /workspace/ctdenoiser
+              pip install -e .
+              python -c "from ctdenoiser.data.dataset import unpack_h5_to_npy; unpack_h5_to_npy('/workspace/data.h5','/workspace/npy_cache')"
+
+              # MPS so the three trainings share the one A100 concurrently.
+              export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps CUDA_MPS_LOG_DIRECTORY=/tmp/nvidia-mps-log
+              mkdir -p "$CUDA_MPS_PIPE_DIRECTORY" "$CUDA_MPS_LOG_DIRECTORY"
+              command -v nvidia-cuda-mps-control >/dev/null 2>&1 && nvidia-cuda-mps-control -d || echo "no MPS; time-sliced"
+
+              # Train only the three arms the qualitative figure needs, to LOCAL
+              # checkpoint dirs (no --wandb-project -> no logging/artifact upload;
+              # the .pt is still written). Separate dirs so redcnn-sup and
+              # redcnn-n2sim don't both land on redcnn.pt.
+              train() {  # $1=model $2=mode $3=ckptdir
+                python -m ctdenoiser.train --model "$1" --training-mode "$2" \
+                  --anatomy abdomen --h5-path /workspace/data.h5 \
+                  --mmap-cache /workspace/npy_cache --epochs "$EPOCHS" \
+                  --batch-size 32 --num-workers 4 --prefetch-factor 4 --seed 0 \
+                  --checkpoint-dir "$3" > "/workspace/$2-$1.log" 2>&1
+              }
+              train redcnn supervised /workspace/ck/redcnn-sup &
+              train redcnn n2sim      /workspace/ck/redcnn-n2sim &
+              train flowmatching n2sim /workspace/ck/flow-n2sim &
+              wait
+              echo "training done:"; ls -R /workspace/ck
+
+              # Render the 6-panel figure straight from the local checkpoints.
+              python scripts/figure_qualitative.py \
+                --h5 /workspace/data.h5 --patient "$PATIENT" --slice "$SLICE" \
+                ${ROI:+--roi "$ROI"} \
+                --models \
+                  "LDCT input=input" \
+                  "Noise2Sim=redcnn:/workspace/ck/redcnn-n2sim/redcnn.pt" \
+                  "Supervised=redcnn:/workspace/ck/redcnn-sup/redcnn.pt" \
+                  "SSFlow (1 step)=ssflow:/workspace/ck/flow-n2sim/flowmatching.pt:1" \
+                  "SSFlow (20 step)=ssflow:/workspace/ck/flow-n2sim/flowmatching.pt:20" \
+                  "Full dose=clean" \
+                --out figures/qualitative.pdf
+
+              # Ship the one PDF out (pod storage is ephemeral).
+              python - <<'PY'
+              import wandb
+              run = wandb.init(project="ctdenoiser-sweep", job_type="figure",
+                               name="qualitative-abdomen")
+              art = wandb.Artifact("qualitative-figure-abdomen", type="figure")
+              art.add_file("figures/qualitative.pdf")
+              run.log_artifact(art); run.finish()
+              print("uploaded qualitative-figure-abdomen")
+              PY
+      volumes:
+        - name: workspace
+          emptyDir:
+            sizeLimit: 50Gi
+        - name: data
+          persistentVolumeClaim:
+            claimName: ctdenoiser
+        - name: shm
+          emptyDir:
+            medium: Memory
