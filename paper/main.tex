@@ -1085,6 +1085,63 @@ source-dependent, which we report rather than average away.
   \end{tabular}
 \end{table*}
 
+\subsection{Robustness to a second anatomy}
+\label{sec:chest}
+The simulated-source check varies the noise model but holds the anatomy fixed.
+To vary the \emph{anatomy}, we re-run the benchmark grid on a chest LDCT cache
+(real low/full-dose pairs, $10$ patients, $8$ train / $2$ val; a single seed --- a
+fast ordering check, not a significance table).  The supervision-regime ordering
+reproduces on the CNNs (Table~\ref{tab:chest}): supervised leads (RED-CNN
+$+3.29$\,dB over the $39.68$\,dB chest floor), Noise2Sim is again the \emph{only}
+label-free method clearly above the floor (RED-CNN $+1.52$), and Noise2Void is
+flat-to-negative.  The task-based erosion reproduces too, and is if anything
+sharper: supervised RED-CNN preserves only $0.46$ of the input's low-contrast
+detectability despite the $+3.3$\,dB.  Two cohort-specific caveats: gains are
+compressed and noisier than abdomen because the chest floor is high ($39.68$ vs.\
+$30.25$\,dB) and only one seed is run; and the data-hungry CTformer diverged on
+the $8$-patient training set (all modes below the floor), so it is omitted here.
+A $3$-seed chest replication is the main remaining strengthening.
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{\textbf{Robustness to a second anatomy} (\texttt{sweep\_chest.yml}):
+           the Table~\ref{tab:results} grid on a chest LDCT cache (real
+           low/full-dose pairs, $10$ patients, \emph{single seed}) instead of
+           abdomen.  PSNR gives the absolute value with the gain over the
+           $39.68$\,dB chest input floor in parentheses.  The CNN supervision
+           ordering reproduces---supervised leads, Noise2Sim the only label-free
+           method above the floor, Noise2Void flat-to-negative---though gains are
+           compressed by the high chest floor and noisier at single seed.  CTformer
+           diverged on the $8$-patient chest cohort (all modes below the floor) and
+           is omitted; CFM requires paired targets and so appears only under
+           supervision.  \textbf{Bold}: best $\Delta$PSNR per supervision block.
+           $\uparrow$/$\downarrow$: higher/lower is better.}
+  \label{tab:chest}
+  \begin{tabular}{llrccccc}
+    \toprule
+    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
+    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
+    \midrule
+    Chest LDCT input & --- (no denoising) & --- & $39.68$ & $0.932$ & $0.0110$ & $0.235$ & $0.0004$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{42.97 \,($+3.29$)} & $0.970$ & $0.0075$ & $0.209$ & $0.0002$ \\
+    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 41.97 \,($+2.29$) & $0.965$ & $0.0084$ & $0.206$ & $0.0002$ \\
+    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 41.70 \,($+2.02$) & $0.959$ & $0.0088$ & $0.216$ & $0.0002$ \\
+    U-Net                            & Supervised & $1.95\mathrm{M}$ & 41.01 \,($+1.33$) & $0.965$ & $0.0092$ & $0.207$ & $0.0002$ \\
+    \midrule
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & \textbf{41.20 \,($+1.52$)} & $0.954$ & $0.0092$ & $0.219$ & $0.0003$ \\
+    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 40.09 \,($+0.41$) & $0.959$ & $0.0102$ & $0.212$ & $0.0003$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 39.85 \,($+0.17$) & $0.935$ & $0.0107$ & $0.232$ & $0.0004$ \\
+    \midrule
+    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & \textbf{39.62 \,($-0.05$)} & $0.959$ & $0.0107$ & $0.212$ & $0.0003$ \\
+    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & 39.38 \,($-0.30$) & $0.949$ & $0.0111$ & $0.223$ & $0.0003$ \\
+    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 38.03 \,($-1.65$) & $0.929$ & $0.0129$ & $0.240$ & $0.0005$ \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
+
 % -----------------------------------------------------------------------
 \section{Discussion}
 
@@ -1122,10 +1179,12 @@ Table~\ref{tab:results}.
 
 \paragraph{Limitations.}
 The \emph{clinical} evaluation---the benchmark and the detectability study---is
-$3$-seed and patient-level but on the abdomen window only; a second anatomy is the
-primary remaining check for the CT-specific numbers, though the
-supervision-regime ordering already reproduces on an independent, simulated
-low-dose source of the same anatomy (Table~\ref{tab:sim-ldct}).  The \emph{theoretical}
+$3$-seed and patient-level but on the abdomen window only for the $3$-seed
+numbers; the supervision-regime ordering additionally reproduces on an
+independent, simulated low-dose source of the same anatomy
+(Table~\ref{tab:sim-ldct}) and, at single seed, on a second anatomy (chest,
+Table~\ref{tab:chest}), leaving a $3$-seed chest replication as the primary
+remaining strengthening for the CT-specific numbers.  The \emph{theoretical}
 claim is less domain-bound: the one-step-optimality and finite-step-departure
 findings reproduce on natural images under i.i.d.\ Gaussian noise
 (Table~\ref{tab:natural}), so they are not artefacts of CT or of correlated noise.
