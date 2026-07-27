@@ -7,6 +7,9 @@
 \usepackage{courier}        % DO NOT CHANGE THIS
 \usepackage[hyphens]{url}   % DO NOT CHANGE THIS
 \usepackage{graphicx}       % DO NOT CHANGE THIS
+% Resolve figures whether the compile root is the repo root (figures/ a sibling
+% of paper/) or a flattened Overleaf project (figures/ next to main.tex).
+\graphicspath{{figures/}{../figures/}{./}}
 \urlstyle{rm}               % DO NOT CHANGE THIS
 \def\UrlFont{\rm}           % DO NOT CHANGE THIS
 \usepackage{caption}        % DO NOT CHANGE THIS
@@ -508,10 +511,7 @@ rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
 \begin{figure*}[t]
   \centering
-  \IfFileExists{../figures/qualitative.pdf}{%
-    \includegraphics[width=\textwidth]{../figures/qualitative.pdf}}{%
-    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/qualitative.pdf}\\[2pt]
-      generate with \texttt{python scripts/figure\_qualitative.py {-}{-}h5 <cache> {-}{-}patient <id> {-}{-}slice <n> {-}{-}models ...}\vspace{2.2em}}}}
+  \includegraphics[width=\textwidth]{qualitative.pdf}
   \caption{\textbf{Qualitative comparison} on a held-out abdomen slice (top: full
            slice with the ROI boxed; bottom: $2\times$ ROI).  The supervised model
            removes the most noise but imparts the blotchy, low-frequency
@@ -537,10 +537,7 @@ $34.50$\,dB).
 
 \begin{figure*}[t]
   \centering
-  \IfFileExists{../figures/detectability.pdf}{%
-    \includegraphics[width=\textwidth]{../figures/detectability.pdf}}{%
-    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/detectability.pdf}\\[2pt]
-      generate with \texttt{python scripts/figure\_detectability.py <sweep\_export.csv>}\vspace{2.2em}}}}
+  \includegraphics[width=\textwidth]{detectability.pdf}
   \caption{\textbf{Task-based detectability} on the benchmark CNNs (mean over $3$
            architectures $\times$ $3$ seeds).  \emph{(a)} CHO detectability
            preserved $d'_\text{den}/d'_\text{in}$ vs lesion contrast: the erosion
@@ -888,15 +885,9 @@ the Noise2Noise objective, not of CT.
 
 \begin{figure*}[t]
   \centering
-  \IfFileExists{../figures/steps_departure.pdf}{%
-    \includegraphics[width=\textwidth]{../figures/steps_departure.pdf}}{%
-    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/steps\_departure.pdf}\\[2pt]
-      generate with \texttt{python scripts/figure\_steps.py <hallucination\_export.csv> {-}{-}regression-ref 1.99}\vspace{2.2em}}}}
+  \includegraphics[width=\textwidth]{steps_departure.pdf}
   \\[4pt]
-  \IfFileExists{../figures/steps_departure_natural.pdf}{%
-    \includegraphics[width=\textwidth]{../figures/steps_departure_natural.pdf}}{%
-    \fbox{\parbox{0.97\textwidth}{\centering\vspace{2.2em}\emph{figures/steps\_departure\_natural.pdf}\\[2pt]
-      generate with \texttt{python scripts/figure\_steps.py <natural\_hallucination\_export.csv> {-}{-}regression-ref 4.09}\vspace{2.2em}}}}
+  \includegraphics[width=\textwidth]{steps_departure_natural.pdf}
   \caption{\textbf{The finite-step departure, predicted and confirmed.}
            \emph{(a)} In the jointly-Gaussian model the relative denoising risk
            $R(t)/R(0)$ of the flow's readout rises monotonically with integration
@@ -1233,10 +1224,6 @@ Y.~Sun, L.-S. Schneider, M.~Gu, S.~Mei, C.~Ye, F.~Wagner, S.~Bayer, and
   for low-dose {CT} with attention-guided bilateral filtering.
 \newblock \emph{arXiv preprint arXiv:2504.13519}, 2025.
 
-% --- ADDED 2026-06: lean must-cites supporting the task-based / hallucination
-% --- framing and the correlated-noise self-supervised cluster. Verify
-% --- volume/page/DOI metadata flagged with TODO before submission.
-
 \bibitem{lee2022apbsn}
 W.~Lee, S.~Son, and K.~M. Lee.
 \newblock {AP-BSN}: Self-supervised denoising for real-world images via
@@ -1250,7 +1237,6 @@ H.~Zhao, Y.~Gu, Q.~Zhao, B.~Du, X.~Xu, and Y.~Yu.
   low-dose {CT} denoising.
 \newblock In \emph{Medical Image Computing and Computer-Assisted Intervention
   (MICCAI)}, LNCS vol.\ 15007, 2024.
-% TODO verify page range.
 
 \bibitem{hein2025pfcm}
 D.~Hein, G.~Stevens, A.~Wang, and G.~Wang.
