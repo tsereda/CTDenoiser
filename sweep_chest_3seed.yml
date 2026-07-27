@@ -1,0 +1,81 @@
+program: python -m ctdenoiser.train
+method: grid
+
+entity: timgsereda
+project: ctdenoiser-sweep
+
+# Chest benchmark matched to the main 3-seed grid: same 5 models x 3 modes x 3
+# seeds as sweep.yml, but pointed at the chest cache via --anatomy chest.
+# Use this when you want chest numbers directly comparable to the abdomen
+# benchmark, not the fast single-seed ordering check in sweep_chest.yml.
+#
+# One combination is special-cased by train.py:
+#   * flowmatching + n2v/n2sim -> trains the *unconditional* self-supervised flow
+#                            (ctdenoiser.models.ssflow) with the mode's target as
+#                            the flow endpoint; the conditional flow would
+#                            reproduce the target's noise, so the unconditional
+#                            net is the correct self-supervised counterpart.
+parameters:
+  model:
+    values:
+      - redcnn
+      - dncnn
+      - unet
+      - ctformer
+      - flowmatching
+
+  training-mode:
+    values:
+      - supervised   # clean-target MSE / flow-matching loss
+      - n2v          # Noise2Void blind-spot self-supervision
+      - n2sim        # Noise2Sim similarity-based self-supervision
+
+  epochs:
+    value: 50
+
+  # --- GPU utilisation / throughput ---------------------------------------
+  batch-size:
+    value: 32
+  num-workers:
+    value: 4
+  prefetch-factor:
+    value: 4
+
+  # Multiple seeds for significance: single-seed tables are not enough for the
+  # final benchmark, and the chest sweep should match the 3-seed abdomen grid.
+  seed:
+    values:
+      - 0
+      - 1
+      - 2
+
+  # --- method-specific hyperparameters (used only by the matching mode) ---
+  n2v-mask-fraction:
+    value: 0.02
+  n2v-neighbor-radius:
+    value: 2
+
+  n2sim-search-radius:
+    value: 4
+  n2sim-patch-radius:
+    value: 1
+  n2sim-num-similar:
+    value: 1
+
+  flow-steps:
+    value: 20
+  flow-steps-eval:
+    value: 5
+
+command:
+  - ${env}
+  - python
+  - -m
+  - ctdenoiser.train
+  - ${args}
+  - --h5-path=/workspace/data.h5
+  - --mmap-cache=/workspace/npy_cache
+  - --wandb-project=ctdenoiser-sweep
+  - --eval-detectability
+  - --detectability-max-slices=200
+  - --detectability-periimage-max-slices=25
