@@ -301,3 +301,19 @@ methods (Table~\ref{tab:sweep-periimage}).
     \bottomrule
   \end{tabular}
 \end{table*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{detectability.pdf}
+  \caption{\textbf{Task-based detectability} on the benchmark CNNs (mean over $3$
+           architectures $\times$ $3$ seeds).  \emph{(a)} CHO detectability
+           preserved $d'_\text{den}/d'_\text{in}$ vs lesion contrast: the erosion
+           concentrates at the high-contrast operating point---precisely where
+           PSNR/SSIM report their largest, most confident gains.  \emph{(b)} The
+           denoised NPS radial centroid falls below the input (dashed)---the
+           low-frequency ``waxy'' texture---most for the supervised models.
+           \emph{(c)} Fabrication $d'$ stays at the signal-absent input floor
+           (dashed) for every regime: detectability is eroded \emph{without}
+           inventing structure.}
+  \label{app:fig-detect}
+\end{figure*}
