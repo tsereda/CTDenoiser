@@ -1,0 +1,167 @@
+% =====================================================================
+% AAAI-2027 Reproducibility Checklist -- ANSWERED
+%
+% HOW TO USE: The authoritative template is the .tex from the AAAI-2027
+% Author Kit (https://aaai.org/authorkit27/). It defines \question and the
+% auto-numbering, and the instructions say to replace ONLY the
+% "Type your response here" text. So: open the official checklist .tex and
+% paste the one-word answer below under each matching question.
+%
+% This file is a self-contained, compilable convenience copy: it defines a
+% minimal \question macro so you can build a filled PDF directly if you
+% prefer. Answers are identical either way.
+%
+% NOTE on the three code-related items (2.8, 4.3, 4.4): they are answered
+% "yes" on the assumption you upload the repository as the OpenReview
+% "Code and Data Supplement". If you do NOT upload code with the submission,
+% downgrade 2.8 to "no" and 4.3/4.4 to "partial".
+% =====================================================================
+\documentclass[letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\newcommand{\question}[2]{\vspace{6pt}\noindent\textbf{#1}~\textit{#2}\\}
+\newcommand{\answer}[1]{\textbf{#1}}
+\setlength{\parindent}{0pt}
+\begin{document}
+
+\begin{center}\Large\textbf{Reproducibility Checklist}\end{center}
+
+\section*{1. General Paper Structure}
+
+1.1.~\question{Includes a conceptual outline and/or pseudocode description of AI
+methods introduced}{(yes/partial/no/NA)}
+\answer{partial}
+
+1.2.~\question{Clearly delineates statements that are opinions, hypothesis, and
+speculation from objective facts and results}{(yes/no)}
+\answer{yes}
+
+1.3.~\question{Provides well-marked pedagogical references for less-familiar
+readers to gain background necessary to replicate the paper}{(yes/no)}
+\answer{yes}
+
+\section*{2. Theoretical Contributions}
+
+2.1.~\question{Does this paper make theoretical contributions?}{(yes/no)}
+\answer{yes}
+
+2.2.~\question{All assumptions and restrictions are stated clearly and
+formally}{(yes/partial/no)}
+\answer{yes}
+
+2.3.~\question{All novel claims are stated formally (e.g., in theorem
+statements)}{(yes/partial/no)}
+\answer{yes}
+
+2.4.~\question{Proofs of all novel claims are included}{(yes/partial/no)}
+\answer{yes}
+
+2.5.~\question{Proof sketches or intuitions are given for complex and/or novel
+results}{(yes/partial/no)}
+\answer{yes}
+
+2.6.~\question{Appropriate citations to theoretical tools used are
+given}{(yes/partial/no)}
+\answer{yes}
+
+2.7.~\question{All theoretical claims are demonstrated empirically to
+hold}{(yes/partial/no/NA)}
+\answer{yes}
+
+2.8.~\question{All experimental code used to eliminate or disprove claims is
+included}{(yes/no/NA)}
+\answer{yes}
+
+\section*{3. Dataset Usage}
+
+3.1.~\question{Does this paper rely on one or more datasets?}{(yes/no)}
+\answer{yes}
+
+3.2.~\question{A motivation is given for why the experiments are conducted on the
+selected datasets}{(yes/partial/no/NA)}
+\answer{yes}
+
+3.3.~\question{All novel datasets introduced in this paper are included in a data
+appendix}{(yes/partial/no/NA)}
+\answer{NA}
+
+3.4.~\question{All novel datasets introduced in this paper will be made publicly
+available upon publication of the paper with a license that allows free usage for
+research purposes}{(yes/partial/no/NA)}
+\answer{NA}
+
+3.5.~\question{All datasets drawn from the existing literature are accompanied by
+appropriate citations}{(yes/no/NA)}
+\answer{yes}
+
+3.6.~\question{All datasets drawn from the existing literature are publicly
+available}{(yes/partial/no/NA)}
+\answer{yes}
+
+3.7.~\question{All datasets that are not publicly available are described in
+detail, with explanation why publicly available alternatives are not
+scientifically satisficing}{(yes/partial/no/NA)}
+\answer{NA}
+
+\section*{4. Computational Experiments}
+
+4.1.~\question{Does this paper include computational experiments?}{(yes/no)}
+\answer{yes}
+
+4.2.~\question{This paper states the number and range of values tried per
+(hyper-)parameter during development of the paper, along with the criterion used
+for selecting the final parameter setting}{(yes/partial/no/NA)}
+\answer{partial}
+
+4.3.~\question{Any code required for pre-processing data is included in the
+appendix}{(yes/partial/no)}
+\answer{yes}
+
+4.4.~\question{All source code required for conducting and analyzing the
+experiments is included in a code appendix}{(yes/partial/no)}
+\answer{yes}
+
+4.5.~\question{All source code required for conducting and analyzing the
+experiments will be made publicly available upon publication of the paper with a
+license that allows free usage for research purposes}{(yes/partial/no)}
+\answer{yes}
+
+4.6.~\question{All source code implementing new methods have comments detailing
+the implementation, with references to the paper where each step comes
+from}{(yes/partial/no)}
+\answer{partial}
+
+4.7.~\question{If an algorithm depends on randomness, then the method used for
+setting seeds is described in a way sufficient to allow replication of
+results}{(yes/partial/no/NA)}
+\answer{yes}
+
+4.8.~\question{This paper specifies the computing infrastructure used for running
+experiments (hardware and software), including GPU/CPU models; amount of memory;
+operating system; names and versions of relevant software libraries and
+frameworks}{(yes/partial/no)}
+\answer{partial}
+
+4.9.~\question{This paper formally describes evaluation metrics used and explains
+the motivation for choosing these metrics}{(yes/partial/no)}
+\answer{yes}
+
+4.10.~\question{This paper states the number of algorithm runs used to compute
+each reported result}{(yes/no)}
+\answer{yes}
+
+4.11.~\question{Analysis of experiments goes beyond single-dimensional summaries
+of performance (e.g., average; median) to include measures of variation,
+confidence, or other distributional information}{(yes/no)}
+\answer{yes}
+
+4.12.~\question{The significance of any improvement or decrease in performance is
+judged using appropriate statistical tests (e.g., Wilcoxon
+signed-rank)}{(yes/partial/no)}
+\answer{partial}
+
+4.13.~\question{This paper lists all final (hyper-)parameters used for each
+model/algorithm in the paper's experiments}{(yes/partial/no/NA)}
+\answer{yes}
+
+\end{document}
