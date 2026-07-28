@@ -712,8 +712,8 @@ nothing beyond $s$) and $\mathbb{E}[n_i\mid s]=0$.  A single velocity
 evaluation thus recovers the Noise2Noise~\cite{lehtinen2018noise2noise}
 optimum from noisy pairs alone.
 
-This composes two established facts in a setting where neither has been stated
-together: the flow-matching denoising identity---an optimally trained velocity
+Our result connects two identities not previously brought together in the
+label-free setting: the flow-matching denoising identity---an optimally trained velocity
 yields the one-step MMSE estimator $\mathbb{E}[x_1\mid x_t]$ at each
 level~\cite{gagneux2025phases,albergo2023stochastic}---and the Noise2Noise
 conditional-mean identity~\cite{lehtinen2018noise2noise}.  Prior statements of
@@ -1083,7 +1083,11 @@ worsens it.  A matched-pairing experiment confirms both: one-step flow ties a
 direct regressor while multi-step Euler integration monotonically erodes
 fidelity, so the decorrelated \emph{pairing}, not the flow machinery, is what
 carries the method, and a one-step regressor on those pairs is our best label-free
-result ($+1.99$\,dB).  All code is released to facilitate reproducibility.
+result ($+1.99$\,dB).  The practical implication is direct: because the multi-step
+penalty is provable rather than incidental, a label-free denoiser built for
+fidelity should read out the one-step posterior mean rather than integrate a
+generative trajectory---iteration buys texture, not accuracy.  All code is released
+to facilitate reproducibility.
 
 % ===== References (extra pages permitted by AAAI) =====
 
