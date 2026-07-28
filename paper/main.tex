@@ -59,19 +59,19 @@ denoiser, recovered with no clean targets, and any multi-step integration
 the flow's terminal marginal is the noisy law, not the clean signal.  A
 matched-pairing experiment confirms both halves: one-step flow ties a direct
 regressor, while multi-step Euler integration monotonically erodes fidelity,
-without ever fabricating structure.  Counterintuitively, this failure \emph{grows
+without ever fabricating structure.  This failure \emph{grows
 with training}: a better-fit velocity integrates more faithfully toward the noisy
-terminal law, so multi-step quality degrades as the model improves---a prediction
+terminal law, so multi-step quality degrades as the model improves, a prediction
 the departure result makes and the experiments bear out.
-The useful ingredient is therefore the decorrelated \emph{pairing}, not the flow
+What does the work is therefore the decorrelated \emph{pairing}, not the flow
 machinery: a one-step regressor on those pairs is our best label-free result
 ($+1.99$\,dB).  We establish this on \textbf{CTDenoiser}, an open benchmark we use
-as a controlled, matched-data testbed for the claim---five architectures across
+as a controlled, matched-data testbed for the claim: five architectures across
 supervised, similarity- and blind-spot self-supervised, and per-image regimes on
-low-dose CT, where the stakes are concrete.  Among label-free methods only the correlated-noise-aware Noise2Sim
+low-dose CT.  Among label-free methods only the correlated-noise-aware Noise2Sim
 beats the noisy baseline, while blind-spot Noise2Void is
 flat-to-negative, because CT's spatially correlated noise violates the
-pixel-independence these methods assume.  And under a task-based channelized
+pixel-independence these methods assume.  Under a task-based channelized
 Hotelling observer, the $\sim$4\,dB PSNR that supervised denoisers do gain
 \emph{erodes} low-contrast lesion detectability rather than improving it, a shift
 PSNR and SSIM miss.  All code, model definitions, and data-loading utilities will
@@ -93,8 +93,8 @@ time \emph{monotonically increases} denoising error, because the flow's terminal
 marginal is the noisy law, not the clean signal.  A matched-data, matched-backbone
 experiment confirms both halves: one-step flow ties a direct regressor, and
 multi-step Euler integration erodes it monotonically, without ever fabricating
-structure.  We establish this on low-dose computed tomography (CT), where the
-stakes are concrete: CT's spatially correlated reconstruction noise breaks the
+structure.  We establish this on low-dose computed tomography (CT), where errors
+carry clinical weight: CT's spatially correlated reconstruction noise breaks the
 pixel-independence assumption behind blind-spot self-supervision, and a task-based
 observer shows the fidelity gains denoisers do achieve can \emph{erode} diagnostic
 detectability rather than improve it.
@@ -140,11 +140,11 @@ We address this with CTDenoiser, a self-contained benchmark that:
         trade-offs of generative denoisers.
 \end{itemize}
 
-This benchmark is the substrate for the theoretical result, not an end in
-itself: its matched-data, matched-backbone control is precisely what lets the
+The benchmark serves the theoretical result rather than standing as an end in
+itself: its matched-data, matched-backbone control is what lets the
 label-free flow-versus-regression comparison below isolate the \emph{estimator}
 from the \emph{pairing}, and turn the one-step-optimality claim into a controlled
-test rather than an anecdote.
+test rather than an isolated observation.
 
 Our contributions are: (i) a theoretical result---an unconditional rectified
 flow trained on Noise2Noise pairs recovers the one-step MMSE denoiser, together
@@ -204,8 +204,8 @@ posterior-mean-then-transport estimators
 (PMRF~\cite{ohayon2025pmrf}, InDI~\cite{delbracio2023indi}) separate the MMSE
 regression step from the generative transport---conceding that iteration buys
 perceptual realism, not distortion.  Section~\ref{sec:method} pushes this to the
-label-free regime and finds the transport is not merely optional but a liability
-for the denoising objective.
+label-free regime and finds the transport not merely optional but harmful
+to the denoising objective.
 
 \paragraph{Self-supervised and zero-shot denoisers.}
 When paired full-dose targets are unavailable, denoisers can be trained
@@ -719,7 +719,7 @@ level~\cite{gagneux2025phases,albergo2023stochastic}---and the Noise2Noise
 conditional-mean identity~\cite{lehtinen2018noise2noise}.  Prior statements of
 the former assume a \emph{clean} target $x_1$; the label-free, symmetric
 two-noisy-realisation case ($\mathbb{E}[x_1\mid s]=\mathbb{E}[x_0\mid s]=s$) is
-the delta, and it is what makes the one-step map a \emph{self-supervised} MMSE
+what is new here, and it is what makes the one-step map a \emph{self-supervised} MMSE
 denoiser.  The equivalence is specific to the $L_2$/velocity-MSE objective
 (whose minimiser is the conditional mean, not the median or mode) and to the
 \emph{restoration} objective---the opposite of the Ambient Diffusion
@@ -797,8 +797,8 @@ population level---not merely empirically.  \emph{(b) A training paradox:} a
 \emph{better}-trained velocity integrates \emph{more} faithfully toward the noisy
 endpoint, so multi-step degrades \emph{as training proceeds}---exactly the
 counter-intuitive trend in Table~\ref{tab:ssflow-steps}.  The one-step posterior
-mean is thus the provably optimal readout on N2N pairs, and iteration is the
-flow's liability made precise.
+mean is thus the provably optimal readout on N2N pairs, and the cost of iteration
+is now made precise rather than merely observed.
 
 \paragraph{Ablation.}
 By \eqref{eq:ss-mmse}, the one-step estimate coincides with
@@ -808,7 +808,7 @@ MMSE leaves behind.  We isolate this over the exclusion radius $r\in\{1,2,3\}$
 and the inference-step count $\{1,4,8,20\}$ (Table~\ref{tab:ssflow-steps}), and
 against the direct regressor at matched pairing (Table~\ref{tab:flow-vs-reg}).
 Three findings emerge.
-\emph{(i) The decorrelated pairing is the active ingredient.}  PSNR follows a
+\emph{(i) The decorrelated pairing is what matters.}  PSNR follows a
 shallow inverted-U in $r$, peaking at $r{=}2$ ($+1.88$\,dB); $r{=}1$---which
 excludes only the query pixel, recovering the plain Noise2Sim target---is
 $0.13$\,dB lower and $r{=}3$ is $0.19$\,dB lower, confirming that matching
@@ -1080,8 +1080,8 @@ Noise2Noise posterior mean in a single step without clean targets, together with
 a finite-step departure result showing any multi-step integration provably
 worsens it.  A matched-pairing experiment confirms both: one-step flow ties a
 direct regressor while multi-step Euler integration monotonically erodes
-fidelity, so the decorrelated \emph{pairing}, not the flow machinery, is the
-useful idea, and a one-step regressor on those pairs is our best label-free
+fidelity, so the decorrelated \emph{pairing}, not the flow machinery, is what
+carries the method, and a one-step regressor on those pairs is our best label-free
 result ($+1.99$\,dB).  All code is released to facilitate reproducibility.
 
 % ===== References (extra pages permitted by AAAI) =====
