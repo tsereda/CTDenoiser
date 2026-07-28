@@ -523,47 +523,32 @@ separately.
   \end{tabular}
 \end{table*}
 
-Table~\ref{tab:detect} shows four things.
-\textbf{First}, the detectability
-\emph{headroom} is small: the clean reference exceeds the noisy input by only
-$\sim$2\% ($d' = 6.18$ vs.\ $6.06$ at $160$\,HU), so at this dose the inserted
-lesions are nearly as detectable in the noisy image as in the noise-free one.
-This narrow headroom is not an artefact of the test but the clinically relevant
-regime: at a realistic LDCT dose the noise floor already leaves supra-threshold
-lesions detectable, so the question is not whether denoising \emph{recovers} lost
-detectability but whether it \emph{preserves} it---and, as the next finding shows,
-even where headroom does exist (high contrast) the denoisers spend it, eroding
-detectability rather than closing the gap to the clean ceiling.
-\textbf{Second}, although these same models gain $4.0$--$4.3$\,dB PSNR
-(supervised) and $1.7$--$1.8$\,dB (Noise2Sim) over the input
-(Table~\ref{tab:results}), none improves detectability at the
-supra-threshold operating point: $d'_\text{denoised} < d'_\text{input}$ in all
-$27$ runs---a $7$--$8\%$ loss at $160$\,HU---and none exceeds the clean ceiling,
-while the fabrication $d'$ on signal-absent ROIs stays at its floor
-($0.022$--$0.033$ vs.\ the $0.028$ input floor), so the deterministic denoisers
-\emph{erode} detectability without \emph{fabricating} it.  The erosion is
-contrast-dependent: near the detection threshold ($40$\,HU) detectability is
-preserved to within $1$--$2\%$, so the loss concentrates precisely at the
-high-contrast operating point where PSNR and SSIM report their largest, most
-confident gains.  \textbf{Third}, the supervised models that win most on PSNR
-also shift the noise-power-spectrum centroid furthest toward low frequency
-($0.112 \!\to\! 0.087$, a $22\%$ drop, vs.\ $0.112 \!\to\! 0.109$ for
-Noise2Void), the blotchy / ``waxy'' texture radiologists distrust and that is
-visible in the qualitative comparison (technical appendix).
-\textbf{Fourth}, the differences \emph{between} supervision regimes are not
-statistically resolved at this sample size: the preserved-detectability ratios
-at $160$\,HU ($0.934\,{\pm}\,0.033$ supervised, $0.919\,{\pm}\,0.030$
-Noise2Sim, $0.919\,{\pm}\,0.030$ Noise2Void) overlap well within one standard
-deviation, so the data support the \emph{erosion} claim---every regime sits
-below $1.0$---but not a fine-grained regime-vs-regime detectability ranking;
-only the NPS-centroid shift cleanly separates supervised from blind-spot
-training.  Reporting the \emph{preserved} ratio
-$d'_\text{denoised}/d'_\text{input}$ rather than the raw index matters here: it
-cancels the large between-split variation in absolute $d'$ (s.d.\ $\pm1.31$ at
-$160$\,HU) and is stable across seeds ($\pm0.003$--$0.033$), isolating the
-denoiser's effect.  None of this contrast-dependent erosion or texture shift
-appears in PSNR or SSIM, which rise monotonically; task-based $d'$ is therefore
-a necessary complement to them, not an optional one.
+Table~\ref{tab:detect} shows four things.  \textbf{First}, the detectability
+\emph{headroom} is small---the clean reference exceeds the noisy input by only
+$\sim$2\% ($d'=6.18$ vs.\ $6.06$ at $160$\,HU)---which is the clinically relevant
+regime: at a realistic LDCT dose supra-threshold lesions are already detectable,
+so the question is whether denoising \emph{preserves} detectability, not whether
+it recovers it.  \textbf{Second}, though these models gain $4.0$--$4.3$\,dB PSNR
+(supervised) and $1.7$--$1.8$\,dB (Noise2Sim) (Table~\ref{tab:results}), none
+improves detectability at the supra-threshold point:
+$d'_\text{denoised}<d'_\text{input}$ in all $27$ runs (a $7$--$8\%$ loss at
+$160$\,HU), none exceeds the clean ceiling, and the fabrication $d'$ stays at its
+floor ($0.022$--$0.033$ vs.\ $0.028$)---the denoisers \emph{erode} detectability
+without \emph{fabricating} it.  The loss concentrates at high contrast (within
+$1$--$2\%$ near the $40$\,HU threshold), precisely where PSNR/SSIM report their
+largest gains.  \textbf{Third}, the models that win most on PSNR shift the NPS
+centroid furthest toward low frequency ($0.112\!\to\!0.087$, $22\%$, vs.\
+$0.112\!\to\!0.109$ for Noise2Void)---the blotchy ``waxy'' texture radiologists
+distrust (qualitative comparison, technical appendix).  \textbf{Fourth},
+differences \emph{between} regimes are not resolved at this sample size (preserved
+ratios at $160$\,HU $0.934{\pm}0.033$ supervised, $0.919{\pm}0.030$
+Noise2Sim/Noise2Void overlap within one s.d.), so the data support the
+\emph{erosion} claim---every regime sits below $1.0$---but not a regime-vs-regime
+ranking; only the NPS-centroid shift separates supervised from blind-spot.  The
+\emph{preserved} ratio cancels the large between-split variation in absolute $d'$
+($\pm1.31$ at $160$\,HU) and is stable across seeds.  None of this appears in PSNR
+or SSIM, which rise monotonically; task-based $d'$ is a necessary complement, not
+an optional one.
 
 % -----------------------------------------------------------------------
 \section{An Unconditional Rectified Flow is a One-Step Noise2Noise Denoiser}
@@ -771,9 +756,9 @@ the Noise2Noise objective, not of CT.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=0.82\textwidth]{steps_departure.pdf}
+  \includegraphics[width=0.74\textwidth]{steps_departure.pdf}
   \\[4pt]
-  \includegraphics[width=0.82\textwidth]{steps_departure_natural.pdf}
+  \includegraphics[width=0.74\textwidth]{steps_departure_natural.pdf}
   \caption{\textbf{The finite-step departure, predicted and confirmed.}
            \emph{(a)} In the jointly-Gaussian model the relative denoising risk
            $R(t)/R(0)$ of the flow's readout rises monotonically with integration
@@ -861,44 +846,34 @@ that Section~\ref{sec:method} probes directly
 (technical appendix).
 
 \paragraph{Metric selection.}
-PSNR and SSIM penalise any pixel-level deviation, even perceptually
-plausible detail, systematically disadvantaging generative models; recent
-reassessments show both metrics misrank restoration algorithms on medical
+PSNR and SSIM penalise any pixel-level deviation, disadvantaging generative
+models; recent reassessments show both misrank restoration algorithms on medical
 images~\cite{breger2025reassess} and fail to track radiologist
 perception~\cite{lee2025ldctiqa}.  GMSD correlates better with perceptual
-judgements~\cite{xue2014gradient}, and RSR is directly interpretable by
-radiologists as a frequency-domain characterisation of residual noise.  The
-stronger standard---task-based detectability via a model
-observer~\cite{li2021detection,kc2024lgcho}, together with explicit
-hallucination quantification~\cite{bhadra2021halluc,tivnan2024halluc}---is
-reported in Section~\ref{sec:detect}: on these benchmark models the CHO
-confirms that the PSNR/SSIM gains overstate task performance, with
-low-contrast detectability eroded rather than improved.  We recommend future
-CT-denoising work report task-based $d'$ alongside the five metrics in
-Table~\ref{tab:results}.
+judgements~\cite{xue2014gradient}, and RSR is interpretable as a frequency-domain
+characterisation of residual noise.  The stronger standard---task-based
+detectability via a model observer~\cite{li2021detection,kc2024lgcho} with
+explicit hallucination quantification~\cite{bhadra2021halluc,tivnan2024halluc}---is
+reported in Section~\ref{sec:detect}: the CHO confirms the PSNR/SSIM gains
+overstate task performance, with low-contrast detectability eroded rather than
+improved.  We recommend future CT-denoising work report task-based $d'$ alongside
+these metrics.
 
 \paragraph{Limitations.}
-The \emph{clinical} evaluation---the benchmark and the detectability study---is
-$3$-seed and patient-level; the supervision-regime ordering, and the
-detectability erosion, additionally reproduce over $3$ seeds on an
-independent \emph{simulated} low-dose source of the same anatomy
-and on a second \emph{anatomy} (chest), so neither is tied to a single
-acquisition, noise model, or anatomy.  Broader multi-scanner and multi-anatomy replication is the natural
-next step for the CT-specific numbers.  The \emph{theoretical}
-claim is less domain-bound: the one-step-optimality and finite-step-departure
-findings reproduce on natural images under i.i.d.\ Gaussian noise
-(technical appendix), so they are not artefacts of CT or of correlated noise.
-The per-image methods (ZS-N2N, Filter2Noise) sit essentially at the noisy floor
-and are reported single-split; their $3$-seed and detectability numbers are
-omitted because each CHO realisation would retrain their per-image network
-thousands of times.  The finite-step departure result
-(Section~\ref{sec:ss-pairs}) is proved exactly only in the jointly-Gaussian model;
-a bound for the general finite-capacity, finite-step case is left open, though the
-CT and natural-image experiments both exhibit the predicted monotone erosion
-outside that model's assumptions.  Detectability is
-reported for the deterministic denoisers and, through the fabrication-vs-steps
-pass, for the generative SSFlow; a broader hallucination analysis of generative
-CT denoisers is a natural extension.
+The \emph{clinical} evaluation is $3$-seed and patient-level; the
+supervision-regime ordering and the detectability erosion reproduce over $3$
+seeds on a \emph{simulated} low-dose source (same anatomy) and on a second
+\emph{anatomy} (chest), so neither is tied to one acquisition, noise model, or
+anatomy---multi-scanner replication is the natural next step.  The
+\emph{theoretical} claims are less domain-bound, reproducing on natural images
+under i.i.d.\ Gaussian noise.  The per-image methods (ZS-N2N, Filter2Noise) are
+reported single-split, as each CHO realisation would retrain their per-image
+network thousands of times.  The finite-step departure is proved exactly only in
+the jointly-Gaussian model---a general finite-capacity bound is open, though the
+CT and natural-image experiments both show the predicted monotone erosion.
+Detectability is reported for the deterministic denoisers and, via the
+fabrication-vs-steps pass, the generative SSFlow; a broader hallucination analysis
+is a natural extension.
 
 % -----------------------------------------------------------------------
 \section{Conclusion}
