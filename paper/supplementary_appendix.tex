@@ -227,3 +227,77 @@ methods (Table~\ref{tab:sweep-periimage}).
            to its one-step readout, as the departure result predicts.}
   \label{app:fig-qual}
 \end{figure*}
+
+\section{Additional method tables}
+\label{app:method-tables}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{\textbf{The result generalises beyond CT} (BSDS500 natural images,
+           white Gaussian noise $\sigma{=}0.1$; $\Delta$PSNR over the noisy input,
+           mean over $3$ seeds).  One-step flow ties the direct regressor at every
+           decorrelation radius $r$, and multi-step Euler integration erodes PSNR
+           monotonically---the same two findings as on CT
+           (Table~\ref{tab:flow-vs-reg}), now off the medical domain and under
+           i.i.d.\ noise, where $r$ (the correlated-noise knob) is inert.}
+  \label{tab:natural}
+  \begin{tabular}{ccccccc}
+    \toprule
+    & \multicolumn{2}{c}{one-step $\Delta$PSNR} & \multicolumn{4}{c}{flow, Euler steps} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-7}
+    $r$ & flow & regression & $1$ & $4$ & $8$ & $20$ \\
+    \midrule
+    $1$ & $+3.91$ & $+4.12$ & $+3.91$ & $+1.94$ & $+1.59$ & $+1.37$ \\
+    $2$ & $+3.90$ & $+4.09$ & $+3.90$ & $+1.89$ & $+1.52$ & $+1.30$ \\
+    $3$ & $+4.05$ & $+4.20$ & $+4.05$ & $+1.92$ & $+1.54$ & $+1.30$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table*}[t]
+  \centering
+  \small
+  \caption{\textbf{Flow-vs-regression control} (\texttt{sweep\_flow\_vs\_reg.yml}
+           $+$ \texttt{sweep\_hallucination.yml}): does the one-step theorem
+           (Section~\ref{sec:rf-n2n}) hold empirically?  We fix the similarity
+           pairing and vary only the estimator.  The \emph{regression} arm is a
+           direct Noise2Sim regressor (RED-CNN, $1.85\mathrm{M}$ params,
+           capacity-comparable to SSFlow's $2.11\mathrm{M}$ velocity net); the
+           \emph{flow} arm is one-step SSFlow.  Both sweep $r\in\{1,2,3\}$ over $3$
+           seeds ($9$ runs each) on the identical pairs, so the arms overlay
+           cell-for-cell; PSNR gain is over each split's own input floor.  \emph{The
+           theorem holds:} at matched $r$ the one-step flow and the regressor agree
+           to within $\le0.2$\,dB (e.g.\ $r{=}2$: $+1.88$ vs.\ $+1.99$), both
+           tracing the same inverted-U that peaks at $r{=}2$---so the decorrelated
+           pairing, not the estimator, is what helps.  A small residual favours
+           regression (consistent with the finite-capacity caveat), so the
+           decorrelated-pairing \emph{one-step regressor} at $r{=}2$
+           ($+1.99$\,dB) is the best label-free result and the estimator of
+           choice; the large cost is \emph{iteration}, not the objective---multi-step
+           flow falls to $+0.5$\,dB (Table~\ref{tab:ssflow-steps}).  Fabrication
+           $d'$ confirms neither estimator invents structure ($\approx$ input
+           floor).  \textbf{Bold}: best cell.  $\uparrow$/$\downarrow$: higher/lower
+           is better.}
+  \label{tab:flow-vs-reg}
+  \begin{tabular}{lcrccccc}
+    \toprule
+    \textbf{Estimator} & \textbf{Radius $r$} &
+    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
+    GMSD\,$\downarrow$ & RSR\,$\downarrow$ & fab.\ $d'$\,$\downarrow$ \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Reference}} \\
+    \quad LDCT input & --- & 30.25 & 0.876 & 0.0320 & 0.174 & 0.0115 & 0.028 \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Regression (Noise2Sim, RED-CNN) --- same pairs, direct MMSE}} \\
+    Regression & $1$ & 32.02 \,($+1.77{\pm}0.14$) & $0.900{\pm}0.015$ & $0.0260$ & $0.163$ & $0.0076$ & $0.029$ \\
+    Regression & $2$ & \textbf{32.24 \,($+1.99{\pm}0.09$)} & $0.904{\pm}0.015$ & $0.0253$ & $0.160$ & $0.0071$ & $0.030$ \\
+    Regression & $3$ & 32.12 \,($+1.87{\pm}0.11$) & $0.904{\pm}0.014$ & $0.0256$ & $0.162$ & $0.0072$ & $0.029$ \\
+    \midrule
+    \multicolumn{8}{l}{\emph{Flow (SSFlow, one-step) --- same pairs, rectified-flow objective}} \\
+    Flow & $1$ & 32.00 \,($+1.75{\pm}0.08$) & $0.899{\pm}0.013$ & $0.0261$ & $0.215$ & $0.0077$ & $0.030$ \\
+    Flow & $2$ & 32.12 \,($+1.88{\pm}0.13$) & $0.902{\pm}0.016$ & $0.0256$ & $0.213$ & $0.0073$ & $0.029$ \\
+    Flow & $3$ & 31.93 \,($+1.69{\pm}0.10$) & $0.896{\pm}0.011$ & $0.0261$ & $0.240$ & $0.0076$ & $0.028$ \\
+    \bottomrule
+  \end{tabular}
+\end{table*}
