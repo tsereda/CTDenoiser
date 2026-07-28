@@ -165,112 +165,69 @@ fabricating structure (Section~\ref{sec:detect}).
 % -----------------------------------------------------------------------
 \section{Related Work}
 
-\paragraph{CNN-based denoisers.}
-RED-CNN~\cite{chen2017lowdose} introduced a residual encoder-decoder
-with multi-level skip connections and remains a standard baseline.
-DnCNN~\cite{zhang2017beyond} demonstrated that a flat stack of
-Conv-BN-ReLU layers with a single residual prediction (noise subtraction
-rather than clean-image prediction) achieves strong performance on
-natural image denoising and transfers well to CT.
-
-\paragraph{Transformer denoisers.}
-CTformer~\cite{wang2022ctformer} applies a U-shaped transformer with
-Token2Token Dilation (T2TD) blocks that aggregate local neighbourhood
-tokens via dilated convolutions interleaved with cyclic spatial shifts.
-This allows long-range self-attention without the quadratic memory cost
-of global attention on full-resolution feature maps.
+\paragraph{CNN and transformer denoisers.}
+RED-CNN~\cite{chen2017lowdose}, a residual encoder-decoder with multi-level skip
+connections, remains a standard baseline, and DnCNN~\cite{zhang2017beyond} showed
+that a flat Conv-BN-ReLU stack with a single residual (noise-subtraction)
+prediction denoises well and transfers to CT.  CTformer~\cite{wang2022ctformer}
+adds a U-shaped transformer whose Token2Token Dilation blocks give long-range
+self-attention without the quadratic cost of global attention.
 
 \paragraph{Generative approaches.}
-Score-based diffusion models~\cite{song2021scorebased} have been applied
-to CT denoising~\cite{gao2023corediff} and can produce perceptually
-superior results, but inference requires hundreds to thousands of neural
-function evaluations (NFEs).  Conditional flow matching~\cite{lipman2022flow,
-albergo2022building} reduces this to as few as 10--50 NFEs by learning
-straight-line probability paths between source and target distributions,
-making it practical for clinical deployment.  Recent few-/single-step
-generative denoisers push this further: Poisson Flow Consistency Models
-(PFCM)~\cite{hein2025pfcm} distil a generative LDCT denoiser to a single step
-and report that an unconstrained generative process introduces substantial
-variability across denoised images, motivating fidelity-preserving
-sampling---a concern our self-supervised flow addresses by construction
-(Section~\ref{sec:method}).  More fundamentally, the perception--distortion
-trade-off~\cite{blau2018perception} establishes that minimising distortion
-necessarily costs perceptual realism for any distortion measure, the formal
-reason a generative denoiser can look realistic while being unfaithful.  A
-parallel line makes the link to denoising explicit: an optimally trained
+Score-based diffusion~\cite{song2021scorebased} has been applied to CT
+denoising~\cite{gao2023corediff} with strong perceptual quality but hundreds to
+thousands of neural function evaluations (NFEs); conditional flow
+matching~\cite{lipman2022flow,albergo2022building} cuts this to 10--50 NFEs via
+straight-line probability paths.  Poisson Flow Consistency Models
+(PFCM)~\cite{hein2025pfcm} distil this to a single step but report large
+image-to-image variability from the unconstrained generative process, motivating
+fidelity-preserving sampling---which our self-supervised flow enforces by
+construction (Section~\ref{sec:method}).  The perception--distortion
+trade-off~\cite{blau2018perception} is the formal reason a generative denoiser can
+look realistic while being unfaithful.  Closest to us, an optimally trained
 flow-matching velocity yields the one-step MMSE denoiser at each noise
 level~\cite{gagneux2025phases,albergo2023stochastic}, and
-posterior-mean-then-transport estimators
-(PMRF~\cite{ohayon2025pmrf}, InDI~\cite{delbracio2023indi}) separate the MMSE
-regression step from the generative transport---conceding that iteration buys
-perceptual realism, not distortion.  Section~\ref{sec:method} pushes this to the
-label-free regime and finds the transport not merely optional but harmful
-to the denoising objective.
+posterior-mean-then-transport estimators (PMRF~\cite{ohayon2025pmrf},
+InDI~\cite{delbracio2023indi}) separate MMSE regression from generative transport;
+Section~\ref{sec:method} pushes this to the label-free regime and finds the
+transport not merely optional but harmful to the denoising objective.
 
 \paragraph{Self-supervised and zero-shot denoisers.}
-When paired full-dose targets are unavailable, denoisers can be trained
-from noisy data alone.  Noise2Noise~\cite{lehtinen2018noise2noise} showed
-that mapping between two independent noisy observations of the same scene
-recovers the clean signal in expectation.  Noise2Void~\cite{krull2019noise2void}
-removes the need for a second observation via a blind-spot scheme that
-withholds each target pixel from the network's receptive field, but it
-assumes pixel-wise \emph{independent} noise---an assumption violated by CT,
-whose reconstruction noise is spatially correlated.
-Neighbor2Neighbor~\cite{huang2021neighbor2neighbor} manufactures a
-Noise2Noise pair from a single image by sub-sampling neighbouring pixels,
-inheriting the same independence assumption.  Two lines of work address
-correlated noise directly: Noise2Sim~\cite{niu2020noise2sim} learns to map
-between the centre pixels of self-similar non-local patches, suppressing
-correlated as well as independent noise and remaining asymptotically
-equivalent to supervised learning; and Zero-Shot Noise2Noise
-(ZS-N2N)~\cite{mansour2023zsn2n} trains a tiny network per image from a
-downsampled Noise2Noise pair, requiring no external data, no noise model,
-and no pretraining.  In the vision literature, asymmetric pixel-shuffle
-downsampling (AP-BSN)~\cite{lee2022apbsn} breaks spatial correlation with a
-large training stride while preserving detail with a small inference stride,
-the mechanism most correlated-noise blind-spot successors build on.  More
-recently, Filter2Noise~\cite{sun2025filter2noise} couples self-supervised
-single-image training with an interpretable attention-guided bilateral
-filter designed specifically for LDCT, and WIA-LD2ND~\cite{zhao2024wia}
-performs self-supervised LDCT denoising in the wavelet domain.  A unifying view
-is Noise2Score~\cite{kim2021noise2score}: self-supervised denoising reduces to
-score estimation, and Tweedie's formula then returns the posterior mean
-$\mathbb{E}[s\mid x]$, placing Noise2Noise, Noise2Void, and SURE under one
-estimator---the same MMSE target our flow reaches in a single step
-(Section~\ref{sec:method}), but via score/Tweedie rather than the flow velocity.
-Our benchmark includes Noise2Void, ZS-N2N, and Filter2Noise as label-free
-baselines and adds Noise2Sim as the correlated-noise-aware extension.
+When paired targets are unavailable, Noise2Noise~\cite{lehtinen2018noise2noise}
+recovers the clean signal in expectation by mapping between two independent noisy
+observations.  Noise2Void~\cite{krull2019noise2void} drops the second observation
+via a blind-spot scheme but assumes pixel-\emph{independent} noise---violated by
+CT's spatially correlated reconstruction noise---as does the single-image
+Neighbor2Neighbor~\cite{huang2021neighbor2neighbor}.  Two lines target correlated
+noise: Noise2Sim~\cite{niu2020noise2sim} maps between centre pixels of
+self-similar non-local patches, staying asymptotically equivalent to supervised
+learning, and Zero-Shot Noise2Noise (ZS-N2N)~\cite{mansour2023zsn2n} trains a tiny
+per-image network from a downsampled pair.  AP-BSN~\cite{lee2022apbsn} breaks
+correlation with an asymmetric train/inference stride, while
+Filter2Noise~\cite{sun2025filter2noise} and WIA-LD2ND~\cite{zhao2024wia} give
+interpretable single-image and wavelet-domain LDCT variants.
+Noise2Score~\cite{kim2021noise2score} unifies these as score estimation whose
+Tweedie posterior mean is the same MMSE target our flow reaches in one step
+(Section~\ref{sec:method}).  Our benchmark includes Noise2Void, ZS-N2N, and
+Filter2Noise, and adds the correlated-noise-aware Noise2Sim.
 
-\paragraph{Task-based and hallucination-aware evaluation.}
+\paragraph{Task-based evaluation and metrics.}
 \label{sec:rw-taskbased}
-Pixel-fidelity metrics such as PSNR and SSIM are increasingly recognised as
-poor proxies for diagnostic quality on medical images, both because they
-misrank novel restoration algorithms~\cite{breger2025reassess} and because
-they do not track radiologist perception of denoised
-CT~\cite{lee2025ldctiqa}.  The more rigorous standard is \emph{task-based}
-assessment: model observers such as the Channelized Hotelling Observer (CHO)
-estimate detectability ($d'$, AUC) on signal-known-exactly /
-background-known-statistically tasks.  Bhadra et al.~\cite{bhadra2021halluc}
-gave the first formal definition of hallucination in tomographic
-reconstruction via the measurement / null-space decomposition, and Tivnan et
-al.~\cite{tivnan2024halluc} introduced a Hallucination Index for generative
-reconstruction that distinguishes added noise from added structure.  Applied
-to denoisers specifically, Li et al.~\cite{li2021detection} showed that deep
-denoising can \emph{destroy} task-relevant information even as conventional
-image-quality metrics improve, and Kc \& Zeng~\cite{kc2024lgcho} found that
-quarter-dose denoised CT can beat full-dose on PSNR and SSIM while remaining
-\emph{inferior} on low-contrast detectability.  These works motivate the
-hallucination-aware, detectability-based evaluation we report on this
-benchmark's supervised and self-supervised models in
+PSNR and SSIM are poor proxies for diagnostic quality: they misrank restoration
+algorithms~\cite{breger2025reassess}, do not track radiologist perception of
+denoised CT~\cite{lee2025ldctiqa}, and penalise generative models that
+hallucinate plausible high-frequency detail---motivating perceptual and texture
+measures such as LPIPS~\cite{zhang2018unreasonable} and the noise power spectrum
+(NPS)~\cite{solomon2012characterization}.  The stronger standard is
+\emph{task-based}: channelized Hotelling observers (CHO) estimate detectability
+($d'$, AUC) on signal-known-exactly / background-known-statistically tasks.
+Bhadra et al.~\cite{bhadra2021halluc} formalised hallucination via the
+measurement/null-space decomposition and Tivnan et al.~\cite{tivnan2024halluc} a
+Hallucination Index; applied to denoisers, Li et al.~\cite{li2021detection} and
+Kc \& Zeng~\cite{kc2024lgcho} showed deep denoising can \emph{destroy}
+task-relevant information---even beating full-dose on PSNR/SSIM while losing
+low-contrast detectability---motivating the detectability evaluation of
 Section~\ref{sec:detect}.
-
-\paragraph{Evaluation metrics.}
-PSNR and SSIM are ubiquitous but favour pixel-level fidelity, potentially
-penalising generative models that hallucinate plausible-but-incorrect
-high-frequency detail.  Perceptual metrics such as
-LPIPS~\cite{zhang2018unreasonable} and the noise power spectrum
-(NPS)~\cite{solomon2012characterization} are more appropriate for
-evaluating perceptual quality and texture authenticity, respectively.
 
 % -----------------------------------------------------------------------
 \section{Methods}
@@ -303,35 +260,18 @@ Section~\ref{sec:inference}.
 
 \subsection{Architectures}
 
-\paragraph{RED-CNN.}
-Chen et al.'s~\cite{chen2017lowdose} Residual Encoder-Decoder CNN uses
-$5\times5$ convolutions throughout.  The encoder consists of five
-convolutional layers (96 filters each), and the decoder mirrors this
-with five transposed-convolutional layers.  Skip connections are added at
-three depths, and all activations use ReLU.
-
-\paragraph{DnCNN.}
-Zhang et al.'s~\cite{zhang2017beyond} denoising CNN uses 17 layers of
-$3\times3$ convolutions.  The first layer has no batch normalisation;
-intermediate layers each apply Conv-BN-ReLU; the final layer has neither.
-The network predicts the noise component $n$ and returns
-$\hat{x} = x - n$, a residual-learning formulation.
-
-\paragraph{CTformer.}
-Wang et al.'s~\cite{wang2022ctformer} architecture tokenises the input
-with a strided convolution, applies a symmetric
-encoder-bottleneck-decoder of Transformer blocks interleaved with
-Token2Token Dilation (T2TD) modules, then detokenises with a transposed
-convolution.  Each T2TD block applies a cyclic spatial shift and a dilated
-re-tokenisation before multi-head self-attention.
-
-\paragraph{U-Net.}
-Our U-Net baseline uses three encoder stages, a two-layer bottleneck, and a
-symmetric decoder with bilinear upsampling and concatenated skip
-connections.  It is included for ablation: it shares the overall shape of
-the velocity network inside our CFM model, so comparing U-Net (MSE) versus
-CFM (flow-matching) isolates the contribution of the generative training
-objective.
+\paragraph{RED-CNN, DnCNN, CTformer, U-Net.}
+RED-CNN~\cite{chen2017lowdose} is a five-layer residual encoder-decoder
+($5\times5$ convolutions, $96$ filters, skip connections at three depths, ReLU).
+DnCNN~\cite{zhang2017beyond} is $17$ layers of $3\times3$ Conv-BN-ReLU that
+predict the noise $n$ and return $\hat{x} = x - n$.
+CTformer~\cite{wang2022ctformer} tokenises with a strided convolution and applies
+a symmetric encoder-bottleneck-decoder of Transformer blocks interleaved with
+Token2Token Dilation (cyclic spatial shift plus dilated re-tokenisation before
+self-attention).  Our U-Net baseline (three encoder stages, a two-layer
+bottleneck, and a bilinear-upsampling decoder with concatenated skip connections)
+shares the body of our CFM velocity network, so U-Net (MSE) vs.\ CFM
+(flow-matching) isolates the training objective at matched capacity.
 
 \paragraph{Conditional Flow Matching (CFM).}
 \label{sec:cfm}
@@ -461,9 +401,8 @@ the floor every method must beat.
            PSNR column gives the absolute value with the gain over each split's
            \emph{LDCT input} floor in parentheses (mean floor $30.25$\,dB).  All
            five architectures are complete over $3$ seeds.  CFM requires paired
-           targets, so it has no blind-spot or similarity variant.  Per-image
-           methods (ZS-N2N, Filter2Noise) are in Table~\ref{tab:sweep-periimage};
-           the label-free SSFlow and its one- vs.\ multi-step ablation are in
+           targets, so it has no blind-spot or similarity variant.  The
+           label-free SSFlow and its one- vs.\ multi-step ablation are in
            Section~\ref{sec:method}.  \textbf{Bold}: best $\Delta$PSNR per
            supervision block.  $\uparrow$/$\downarrow$: higher/lower is better.}
   \label{tab:results}
@@ -509,23 +448,9 @@ label-free method and the supervised upper bound, quantifying the headroom
 for correlated-noise-aware self-supervision---the gap our self-supervised
 rectified flow (SSFlow) targets in Section~\ref{sec:method}.
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{qualitative.pdf}
-  \caption{\textbf{Qualitative comparison} on a held-out abdomen slice (top: full
-           slice with the ROI boxed; bottom: $2\times$ ROI).  The supervised model
-           removes the most noise but imparts the blotchy, low-frequency
-           ``waxy'' texture that the NPS-centroid shift quantifies
-           (Section~\ref{sec:detect}); Noise2Sim preserves finer texture; and
-           multi-step SSFlow visibly drifts back toward the noisy input relative to
-           its one-step readout, as the departure result predicts.}
-  \label{fig:qual}
-\end{figure*}
-
 \paragraph{Per-fold stability.}
 The regime ordering holds fold-by-fold and is established early in training: a
-reduced 15-epoch replication on the same three folds
-(Appendix~\ref{app:supp-tables}, Table~\ref{tab:cv}) reproduces it---supervised
+reduced 15-epoch replication on the same three folds reproduces it---supervised
 $+4.0$ to $+4.2$\,dB, Noise2Sim the only label-free method clearing the floor
 ($+1.74{\pm}0.09$\,dB on RED-CNN), and the rest within noise
 ($|\Delta\text{PSNR}|\le0.32$\,dB)---with absolute PSNR already within
@@ -639,7 +564,7 @@ confident gains.  \textbf{Third}, the supervised models that win most on PSNR
 also shift the noise-power-spectrum centroid furthest toward low frequency
 ($0.112 \!\to\! 0.087$, a $22\%$ drop, vs.\ $0.112 \!\to\! 0.109$ for
 Noise2Void), the blotchy / ``waxy'' texture radiologists distrust and that is
-visible in the qualitative panel (Figure~\ref{fig:qual}).
+visible in the qualitative comparison (technical appendix).
 \textbf{Fourth}, the differences \emph{between} supervision regimes are not
 statistically resolved at this sample size: the preserved-detectability ratios
 at $160$\,HU ($0.934\,{\pm}\,0.033$ supervised, $0.919\,{\pm}\,0.030$
@@ -913,9 +838,7 @@ Table~\ref{tab:ssflow-steps} is the inference-steps ablation above
 (\texttt{sweep\_hallucination.yml}); Table~\ref{tab:flow-vs-reg}
 (\texttt{sweep\_flow\_vs\_reg.yml}) is its regression control, holding the
 similarity pairing fixed and swapping the flow estimator for a direct Noise2Sim
-regressor to isolate whether the flow or the pairing is what matters.  The
-per-image grid (\texttt{sweep\_periimage.yml}) is in Appendix~\ref{app:supp-tables},
-Table~\ref{tab:sweep-periimage}.
+regressor to isolate whether the flow or the pairing is what matters.
 
 \begin{table*}[t]
   \centering
@@ -1046,15 +969,14 @@ The \emph{clinical} evaluation---the benchmark and the detectability study---is
 $3$-seed and patient-level; the supervision-regime ordering, and the
 detectability erosion, additionally reproduce over $3$ seeds on an
 independent \emph{simulated} low-dose source of the same anatomy
-(Table~\ref{tab:sim-ldct}) and on a second \emph{anatomy} (chest,
-Table~\ref{tab:chest}), so neither is tied to a single acquisition, noise model,
-or anatomy.  Broader multi-scanner and multi-anatomy replication is the natural
+and on a second \emph{anatomy} (chest), so neither is tied to a single
+acquisition, noise model, or anatomy.  Broader multi-scanner and multi-anatomy replication is the natural
 next step for the CT-specific numbers.  The \emph{theoretical}
 claim is less domain-bound: the one-step-optimality and finite-step-departure
 findings reproduce on natural images under i.i.d.\ Gaussian noise
 (Table~\ref{tab:natural}), so they are not artefacts of CT or of correlated noise.
-The per-image methods (ZS-N2N, Filter2Noise) are reported single-split
-(Appendix~\ref{app:supp-tables}); their $3$-seed and detectability numbers are
+The per-image methods (ZS-N2N, Filter2Noise) sit essentially at the noisy floor
+and are reported single-split; their $3$-seed and detectability numbers are
 omitted because each CHO realisation would retrain their per-image network
 thousands of times.  The finite-step departure result
 (Section~\ref{sec:ss-pairs}) is proved exactly only in the jointly-Gaussian model;
@@ -1328,213 +1250,9 @@ J.~B. Solomon, O.~Christianson, and E.~Samei.
 
 \end{thebibliography}
 
-% ===== Supplementary material: after references; not counted in the 7-page limit =====
-\appendix
 
-\section{Robustness experiments}
-\label{app:robustness}
-The benchmark ordering is corroborated on two further axes below: an
-independent \emph{simulated} low-dose source (same anatomy) and a second
-\emph{anatomy} (chest). Both are summarised in the Limitations paragraph of
-the main text.
-
-\subsection{Robustness to a second LDCT source}
-\label{sec:sim-ldct}
-The main benchmark (Table~\ref{tab:results}) draws its low-dose arm from one real
-acquisition.  To check that the supervision-regime ordering is a property of
-correlated LDCT noise rather than of that single acquisition, we re-run the same
-architecture\,$\times$\,supervision grid on an independent low-dose source
-(\texttt{sweep\_sim\_ldct.yml}): the low-dose images are \emph{simulated} from the
-same abdomen full-dose volumes with a correlated, signal-dependent noise model
-(\texttt{-{}-sim-base-std=0.03}, \texttt{-{}-sim-signal-std=0.06}), giving a
-harsher $28.3$\,dB input floor (vs.\ $30.25$\,dB real).  Everything else---patient
-splits, patch size, optimiser, seeds, epochs---is held fixed.
-
-The regime ordering reproduces on the second source
-(Table~\ref{tab:sim-ldct}): supervised denoising gains $\sim$$4.5$--$4.9$\,dB with
-the three CNNs again within $0.4$\,dB of one another; among label-free methods
-Noise2Sim is the \emph{only} one that clears the noisy floor at every backbone,
-while blind-spot Noise2Void is flat-to-negative ($-0.09$ to $+0.04$\,dB).  The
-qualitative story is therefore source-independent.  Two magnitudes shift with the
-noise model, in the direction the mechanism predicts: Noise2Sim's margin
-\emph{compresses} to $+0.9$\,dB (from $+1.8$\,dB on the real source), because the
-simulated field is more nearly stationary and leaves the similarity search less
-correlation structure to exploit; and Noise2Void moves toward---rather than
-below---the floor, as a milder correlation length lessens (without removing) its
-pixel-independence violation.  The ordering is robust; the label-free margin is
-source-dependent, which we report rather than average away.
-
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{\textbf{Robustness to a second LDCT source} (\texttt{sweep\_sim\_ldct.yml}):
-           the Table~\ref{tab:results} grid re-run with the low-dose arm
-           \emph{simulated} from the abdomen full-dose volumes (correlated,
-           signal-dependent noise; $3$ seeds, $50$ epochs, matched splits).  PSNR
-           gives the absolute value with the gain over the $28.26$\,dB simulated
-           input floor in parentheses.  The supervision-regime ordering matches the
-           real-source benchmark---supervised $\sim$$4.5$--$4.9$\,dB, Noise2Sim the
-           only label-free method above the floor, Noise2Void flat-to-negative---so
-           it is not an artefact of one acquisition; the label-free margin
-           compresses under the more stationary simulated noise.  \textbf{Bold}:
-           best $\Delta$PSNR per supervision block.  $^{\dagger}$Two CTformer runs
-           crashed near convergence (epoch $47$--$49$), leaving supervised at
-           $2/3$ and Noise2Void at $1/3$ seeds (shown without s.d.); all other
-           cells are $3$ seeds.  $\uparrow$/$\downarrow$: higher/lower is better.}
-  \label{tab:sim-ldct}
-  \begin{tabular}{llrccccc}
-    \toprule
-    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
-    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    Simulated LDCT input & --- (no denoising) & --- & $28.26$ & $0.597$ & $0.0388$ & $0.418$ & $0.0153$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{33.17 \,($+4.91{\pm}0.13$)} & $0.937$ & $0.0221$ & $0.169$ & $0.0050$ \\
-    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 32.90 \,($+4.64{\pm}0.14$) & $0.934$ & $0.0228$ & $0.222$ & $0.0053$ \\
-    U-Net                            & Supervised & $1.95\mathrm{M}$ & 32.78 \,($+4.52{\pm}0.11$) & $0.933$ & $0.0231$ & $0.222$ & $0.0055$ \\
-    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Supervised & $0.40\mathrm{M}$ & 30.22 \,($+1.96{\pm}0.04$) & $0.860$ & $0.0309$ & $0.361$ & $0.0098$ \\
-    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 31.07 \,($+2.81{\pm}0.17$) & $0.914$ & $0.0281$ & $0.226$ & $0.0081$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & \textbf{29.22 \,($+0.96{\pm}0.07$)} & $0.706$ & $0.0347$ & $0.409$ & $0.0123$ \\
-    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 29.19 \,($+0.93{\pm}0.05$) & $0.673$ & $0.0348$ & $0.384$ & $0.0124$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 29.11 \,($+0.85{\pm}0.05$) & $0.667$ & $0.0351$ & $0.395$ & $0.0126$ \\
-    CTformer~\cite{wang2022ctformer} & Noise2Sim~\cite{niu2020noise2sim} & $0.40\mathrm{M}$ & 28.81 \,($+0.55{\pm}0.09$) & $0.810$ & $0.0364$ & $0.346$ & $0.0135$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{28.30 \,($+0.04{\pm}0.09$)} & $0.643$ & $0.0386$ & $0.398$ & $0.0152$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 28.24 \,($-0.02{\pm}0.04$) & $0.627$ & $0.0389$ & $0.390$ & $0.0154$ \\
-    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 28.17 \,($-0.09{\pm}0.08$) & $0.646$ & $0.0391$ & $0.381$ & $0.0157$ \\
-    CTformer$^{\dagger}$~\cite{wang2022ctformer} & Noise2Void~\cite{krull2019noise2void} & $0.40\mathrm{M}$ & 28.04 \,($-0.20$) & $0.723$ & $0.0397$ & $0.342$ & $0.0163$ \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
-\subsection{Robustness to a second anatomy}
-\label{sec:chest}
-The simulated-source check varies the noise model but holds the anatomy fixed.
-To vary the \emph{anatomy}, we re-run the benchmark grid on a chest LDCT cache
-(real low/full-dose pairs, $10$ patients, $8$ train / $2$ val), now across $3$
-seeds.  The supervision-regime ordering
-reproduces on the CNNs (Table~\ref{tab:chest}): supervised leads (RED-CNN
-$+3.21{\pm}0.14$\,dB over the $39.40$\,dB mean chest floor), Noise2Sim is again
-the \emph{only} label-free method clearly above the floor at every backbone
-($+0.28$ to $+1.49$\,dB), and Noise2Void is within noise of the floor or below
-($+0.42{\pm}0.68$\,dB at best, $-1.26$\,dB on DnCNN).  The task-based erosion
-reproduces too, and is if anything sharper: supervised RED-CNN preserves only
-$0.43{\pm}0.09$ of the input's low-contrast detectability despite the
-$+3.2$\,dB.  Two cohort-specific caveats remain: gains are compressed relative to
-abdomen because the chest floor is high ($39.40$ vs.\ $30.25$\,dB); and the
-data-hungry CTformer diverged on the $8$-patient training set (all modes far
-below the floor at every seed), so it is omitted here.
-
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{\textbf{Robustness to a second anatomy} (\texttt{sweep\_chest\_3seed.yml}):
-           the Table~\ref{tab:results} grid on a chest LDCT cache (real
-           low/full-dose pairs, $10$ patients, $8$ train / $2$ val; $3$ seeds,
-           $50$ epochs) instead of
-           abdomen.  PSNR gives the absolute value with the gain over the
-           $39.40$\,dB mean chest input floor in parentheses (mean\,$\pm$\,s.d.\
-           over $3$ seeds).  The CNN supervision
-           ordering reproduces---supervised leads, Noise2Sim the only label-free
-           method clearly above the floor, Noise2Void within noise of it to
-           negative---though gains are compressed by the high chest floor.  CTformer
-           diverged on the $8$-patient chest cohort (all modes far below the floor
-           at every seed) and
-           is omitted; CFM requires paired targets and so appears only under
-           supervision.  \textbf{Bold}: best $\Delta$PSNR per supervision block.
-           $\uparrow$/$\downarrow$: higher/lower is better.}
-  \label{tab:chest}
-  \begin{tabular}{llrccccc}
-    \toprule
-    \textbf{Model} & \textbf{Supervision} & \textbf{Params} &
-    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    Chest LDCT input & --- (no denoising) & --- & $39.40$ & $0.931$ & $0.0112$ & $0.236$ & $0.0004$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Supervised & $1.85\mathrm{M}$ & \textbf{42.61 \,($+3.21{\pm}0.14$)} & $0.970$ & $0.0077$ & $0.210$ & $0.0002$ \\
-    CFM~\cite{lipman2022flow}        & Supervised & $2.11\mathrm{M}$ & 41.60 \,($+2.21{\pm}0.02$) & $0.963$ & $0.0086$ & $0.206$ & $0.0002$ \\
-    DnCNN~\cite{zhang2017beyond}     & Supervised & $0.56\mathrm{M}$ & 41.21 \,($+1.82{\pm}0.07$) & $0.958$ & $0.0091$ & $0.218$ & $0.0003$ \\
-    U-Net                            & Supervised & $1.95\mathrm{M}$ & 41.21 \,($+1.82{\pm}0.44$) & $0.964$ & $0.0090$ & $0.206$ & $0.0002$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Sim~\cite{niu2020noise2sim} & $1.85\mathrm{M}$ & \textbf{40.89 \,($+1.49{\pm}0.04$)} & $0.952$ & $0.0094$ & $0.220$ & $0.0003$ \\
-    U-Net                            & Noise2Sim~\cite{niu2020noise2sim} & $1.95\mathrm{M}$ & 40.55 \,($+1.15{\pm}0.44$) & $0.959$ & $0.0097$ & $0.212$ & $0.0003$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Sim~\cite{niu2020noise2sim} & $0.56\mathrm{M}$ & 39.67 \,($+0.28{\pm}0.13$) & $0.936$ & $0.0108$ & $0.234$ & $0.0004$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose}   & Noise2Void~\cite{krull2019noise2void} & $1.85\mathrm{M}$ & \textbf{39.81 \,($+0.42{\pm}0.68$)} & $0.948$ & $0.0106$ & $0.224$ & $0.0003$ \\
-    U-Net                            & Noise2Void~\cite{krull2019noise2void} & $1.95\mathrm{M}$ & 39.75 \,($+0.35{\pm}0.61$) & $0.956$ & $0.0106$ & $0.214$ & $0.0003$ \\
-    DnCNN~\cite{zhang2017beyond}     & Noise2Void~\cite{krull2019noise2void} & $0.56\mathrm{M}$ & 38.14 \,($-1.26{\pm}0.57$) & $0.927$ & $0.0128$ & $0.242$ & $0.0005$ \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
-\section{Supplementary Tables}
-\label{app:supp-tables}
-
-Two supporting tables referenced from the main text: the reduced-budget
-cross-validation that confirms the per-fold stability of the benchmark ordering
-(Table~\ref{tab:cv}, Section~\ref{sec:results}) and the per-image, test-time
-methods (Table~\ref{tab:sweep-periimage}).
-
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{Three-fold patient-level cross-validation on TCIA LDCT (abdomen;
-           15 epochs).  $\Delta$PSNR and SSIM are the mean ($\pm$ s.d.) across
-           the three folds; the PSNR gain is measured against each fold's own
-           LDCT-input floor ($31.44/30.04/29.27$\,dB for folds $1/2/3$).  PSNR,
-           RMSE, and RSR are fold means.  Only DnCNN and RED-CNN completed
-           all three folds and are shown; U-Net had incomplete fold coverage at
-           export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
-           (single row each).  \textbf{Bold}: best per column.
-           \underline{Underline}: best \emph{label-free} PSNR gain.}
-  \label{tab:cv}
-  \begin{tabular}{llccccc}
-    \toprule
-    \textbf{Model} & \textbf{Supervision} &
-    $\Delta$PSNR\,$\uparrow$ (dB) & PSNR\,$\uparrow$ & SSIM\,$\uparrow$ &
-    RMSE\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Supervised & \textbf{+4.19 $\pm$ 0.22} & \textbf{34.43} & \textbf{0.927 $\pm$ 0.013} & \textbf{0.0195} & \textbf{0.0042} \\
-    DnCNN~\cite{zhang2017beyond}   & Supervised & +4.04 $\pm$ 0.22 & 34.29 & 0.924 $\pm$ 0.015 & 0.0199 & 0.0044 \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Noise2Sim~\cite{niu2020noise2sim} & \underline{+1.74 $\pm$ 0.09} & 31.99 & 0.900 $\pm$ 0.015 & 0.0261 & 0.0077 \\
-    DnCNN~\cite{zhang2017beyond}   & Noise2Sim~\cite{niu2020noise2sim} & +1.42 $\pm$ 0.28 & 31.66 & 0.895 $\pm$ 0.015 & 0.0271 & 0.0082 \\
-    \midrule
-    RED-CNN~\cite{chen2017lowdose} & Noise2Void~\cite{krull2019noise2void} & +0.32 $\pm$ 0.10 & 30.57 & 0.883 $\pm$ 0.019 & 0.0306 & 0.0105 \\
-    DnCNN~\cite{zhang2017beyond}   & Noise2Void~\cite{krull2019noise2void} & $-0.02$ $\pm$ 0.06 & 30.23 & 0.875 $\pm$ 0.018 & 0.0320 & 0.0114 \\
-    \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & +0.26 $\pm$ 0.11 & 30.51 & 0.881 $\pm$ 0.016 & 0.0309 & 0.0105 \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $-0.09$ $\pm$ 0.20 & 30.16 & 0.879 $\pm$ 0.015 & 0.0319 & 0.0112 \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
-
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{\textbf{Per-image sweep} (\texttt{sweep\_periimage.yml}): test-time,
-           data-free methods, model-agnostic.  Values shown are single-split
-           seed-0 (floor $31.44$\,dB; $\Delta$ over that floor); the $3$-seed
-           means ($2$ modes $\times$ $3$ seeds) are pending and will match the
-           benchmark's $30.25$\,dB floor.  Both methods sit essentially at the
-           noisy floor---consistent with the label-free ordering in
-           Table~\ref{tab:results}.  $\uparrow$/$\downarrow$: higher/lower is
-           better.}
-  \label{tab:sweep-periimage}
-  \begin{tabular}{llrccccc}
-    \toprule
-    \textbf{Method} & \textbf{Type} & \textbf{Params} &
-    PSNR\,$\uparrow$ (\,$\Delta$) & SSIM\,$\uparrow$ & RMSE\,$\downarrow$ &
-    GMSD\,$\downarrow$ & RSR\,$\downarrow$ \\
-    \midrule
-    Filter2Noise~\cite{sun2025filter2noise} & Zero-shot & --- & 31.58 \,(+0.14) & 0.896 & 0.0269 & 0.176 & 0.0076 \\
-    ZS-N2N~\cite{mansour2023zsn2n}          & Zero-shot & $21.3\mathrm{K}$ & 31.17 \,($-0.27$) & 0.892 & 0.0281 & 0.182 & 0.0083 \\
-    \bottomrule
-  \end{tabular}
-\end{table*}
+% ===== Reproducibility checklist: AAAI places this in the main PDF after the
+% references; it does NOT count toward the 7-page limit. =====
 
 \section{Reproducibility Checklist}
 \label{app:repro}
