@@ -1,0 +1,126 @@
+% =====================================================================
+% Standalone Technical Appendix (supplementary material) for the AAAI-26
+% submission. NOT part of the 7-page main paper.
+%
+% COMPILE ORDER: build main.tex FIRST (produces main.aux), then build this
+% file twice. \externaldocument{main} then resolves cross-references
+% (Table 1, Section 4, etc.) to the main paper's numbers.
+% =====================================================================
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+% Anonymous-submission mode; for the camera-ready, drop the [submission]
+% option and restore the author block below.
+\usepackage[submission]{aaai2026}
+\usepackage{times}          % DO NOT CHANGE THIS
+\usepackage{helvet}         % DO NOT CHANGE THIS
+\usepackage{courier}        % DO NOT CHANGE THIS
+\usepackage[hyphens]{url}   % DO NOT CHANGE THIS
+\usepackage{graphicx}       % DO NOT CHANGE THIS
+% Resolve figures whether the compile root is the repo root (figures/ a sibling
+% of paper/) or a flattened Overleaf project (figures/ next to main.tex).
+\graphicspath{{figures/}{../figures/}{./}}
+\urlstyle{rm}               % DO NOT CHANGE THIS
+\def\UrlFont{\rm}           % DO NOT CHANGE THIS
+\usepackage{caption}        % DO NOT CHANGE THIS
+\frenchspacing              % DO NOT CHANGE THIS
+\setlength{\pdfpagewidth}{8.5in}  % DO NOT CHANGE THIS
+\setlength{\pdfpageheight}{11in}  % DO NOT CHANGE THIS
+
+% Paper-specific packages (none on the AAAI disallowed list).
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{microtype}
+
+\pdfinfo{
+/TemplateVersion (2026.1)
+}
+% Section + subsection numbers (sanctioned by the AAAI template: "May be
+% changed to 1 or 2 if section numbers are desired"); the paper cross-references
+% subsections, so numbering depth 2 is required for \ref to resolve.
+\setcounter{secnumdepth}{2}
+
+% -----------------------------------------------------------------------
+\title{One-Step Is Optimal: Unconditional Rectified Flows are\\
+       Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts---\\
+       A Benchmark and Task-Based Detectability Study on Low-Dose CT}
+
+% Camera-ready author block (hidden by the [submission] option; the style
+% file prints ``Anonymous submission'' in its place):
+% \author{Tim Sereda}
+% \affiliations{\texttt{timgsereda@gmail.com}}
+\author{Anonymous submission}
+\affiliations{Anonymous submission}
+% -----------------------------------------------------------------------
+
+% Cross-reference the main paper's labels (Table/Section numbers).
+\usepackage{xr}
+\externaldocument{main}
+
+\begin{document}
+
+% Override the main paper's title for the appendix.
+\title{Technical Appendix:\\ One-Step Is Optimal --- Unconditional Rectified
+       Flows are Noise2Noise Denoisers}
+\author{Anonymous submission}
+\affiliations{Anonymous submission}
+\maketitle
+
+\input{supplementary_appendix}
+
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+\bibitem{chen2017lowdose}
+H.~Chen, Y.~Zhang, M.~K. Kalra, F.~Lin, Y.~Chen, P.~Liao, J.~Zhou, and
+  G.~Wang.
+\newblock Low-dose {CT} with a residual encoder-decoder convolutional neural
+  network.
+\newblock \emph{IEEE Transactions on Medical Imaging}, 36(12):2524--2535, 2017.
+
+\bibitem{krull2019noise2void}
+A.~Krull, T.-O. Buchholz, and F.~Jug.
+\newblock {Noise2Void}---learning denoising from single noisy images.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2019.
+
+\bibitem{lipman2022flow}
+Y.~Lipman, R.~T.~Q. Chen, H.~Ben-Hamu, M.~Nickel, and M.~Le.
+\newblock Flow matching for generative modeling.
+\newblock In \emph{International Conference on Learning Representations}, 2023.
+
+\bibitem{mansour2023zsn2n}
+Y.~Mansour and R.~Heckel.
+\newblock Zero-shot {Noise2Noise}: Efficient image denoising without any data.
+\newblock In \emph{IEEE Conference on Computer Vision and Pattern Recognition},
+  2023.
+
+\bibitem{niu2020noise2sim}
+C.~Niu and G.~Wang.
+\newblock {Noise2Sim}---similarity-based self-learning for image denoising.
+\newblock \emph{arXiv preprint arXiv:2011.03384}, 2020.
+\newblock Published as ``Noise suppression with similarity-based
+  self-supervised deep learning,'' \emph{IEEE Transactions on Medical Imaging},
+  42(6):1590--1602, 2023.
+
+\bibitem{sun2025filter2noise}
+Y.~Sun, L.-S. Schneider, M.~Gu, S.~Mei, C.~Ye, F.~Wagner, S.~Bayer, and
+  A.~Maier.
+\newblock {Filter2Noise}: Interpretable self-supervised single-image denoising
+  for low-dose {CT} with attention-guided bilateral filtering.
+\newblock \emph{arXiv preprint arXiv:2504.13519}, 2025.
+
+\bibitem{wang2022ctformer}
+C.~Wang, S.~Shang, H.~Zhang, Q.~Li, and S.~K. Zhou.
+\newblock {CTformer}: Convolution-free token2token dilated faster self-attention
+  for {CT} image denoising.
+\newblock \emph{Physics in Medicine \& Biology}, 68(6):065012, 2023.
+
+\bibitem{zhang2017beyond}
+K.~Zhang, W.~Zuo, Y.~Chen, D.~Meng, and L.~Zhang.
+\newblock Beyond a {G}aussian denoiser: Residual learning of deep {CNN} for
+  image denoising.
+\newblock \emph{IEEE Transactions on Image Processing}, 26(7):3142--3155, 2017.
+
+\end{thebibliography}
+
+\end{document}
