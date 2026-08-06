@@ -1,15 +1,10 @@
 \documentclass[letterpaper]{article} % DO NOT CHANGE THIS
-% arXiv preprint mode: [draft] shows the author block and suppresses the AAAI
-% copyright slug (that slug belongs only on an accepted camera-ready).  For an
-% anonymous conference submission, switch this back to [submission].
-\usepackage[draft]{aaai2026}
+\usepackage[draft]{aaai2026}   % [submission] for anonymous review
 \usepackage{times}          % DO NOT CHANGE THIS
 \usepackage{helvet}         % DO NOT CHANGE THIS
 \usepackage{courier}        % DO NOT CHANGE THIS
 \usepackage[hyphens]{url}   % DO NOT CHANGE THIS
 \usepackage{graphicx}       % DO NOT CHANGE THIS
-% Resolve figures whether the compile root is the repo root (figures/ a sibling
-% of paper/) or a flattened Overleaf project (figures/ next to main.tex).
 \graphicspath{{figures/}{../figures/}{./}}
 \urlstyle{rm}               % DO NOT CHANGE THIS
 \def\UrlFont{\rm}           % DO NOT CHANGE THIS
@@ -18,7 +13,6 @@
 \setlength{\pdfpagewidth}{8.5in}  % DO NOT CHANGE THIS
 \setlength{\pdfpageheight}{11in}  % DO NOT CHANGE THIS
 
-% Paper-specific packages (none on the AAAI disallowed list).
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{multirow}
@@ -27,15 +21,9 @@
 \pdfinfo{
 /TemplateVersion (2026.1)
 }
-% Bind the technical appendix into this document (single-file arXiv upload).
-% For a page-limited venue where the appendix does not travel with the
-% submission PDF, set \includeappendixfalse and build supplementary.tex instead.
 \newif\ifincludeappendix
 \includeappendixtrue
 
-% Section + subsection numbers (sanctioned by the AAAI template: "May be
-% changed to 1 or 2 if section numbers are desired"); the paper cross-references
-% subsections, so numbering depth 2 is required for \ref to resolve.
 \setcounter{secnumdepth}{2}
 
 % -----------------------------------------------------------------------
@@ -908,11 +896,6 @@ fidelity should read out the one-step posterior mean rather than integrate a
 generative trajectory---iteration buys texture, not accuracy.  All code is released
 at \url{https://github.com/tsereda/CTDenoiser} to facilitate reproducibility.
 
-% ===== References (extra pages permitted by AAAI) =====
-
-% NOTE (camera-ready): AAAI requires natbib + aaai2026.bst with a .bib file;
-% the inline thebibliography below is acceptable for review but should be
-% converted (\bibliographystyle{aaai2026}, \bibliography{refs}) on acceptance.
 \bibliographystyle{plain}
 \begin{thebibliography}{99}
 
@@ -1147,7 +1130,6 @@ J.~B. Solomon, O.~Christianson, and E.~Samei.
 
 \end{thebibliography}
 
-% ===== Technical appendix (bound in for the preprint; see the toggle above) =====
 \ifincludeappendix
 \input{supplementary_appendix}
 \fi
