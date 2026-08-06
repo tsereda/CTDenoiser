@@ -7,9 +7,10 @@
 % (Table 1, Section 4, etc.) to the main paper's numbers.
 % =====================================================================
 \documentclass[letterpaper]{article} % DO NOT CHANGE THIS
-% Anonymous-submission mode; for the camera-ready, drop the [submission]
-% option and restore the author block below.
-\usepackage[submission]{aaai2026}
+% arXiv preprint mode: [draft] shows the author block and suppresses the AAAI
+% copyright slug.  For an anonymous conference submission, switch back to
+% [submission].
+\usepackage[draft]{aaai2026}
 \usepackage{times}          % DO NOT CHANGE THIS
 \usepackage{helvet}         % DO NOT CHANGE THIS
 \usepackage{courier}        % DO NOT CHANGE THIS
@@ -44,12 +45,16 @@
        Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts---\\
        A Benchmark and Task-Based Detectability Study on Low-Dose CT}
 
-% Camera-ready author block (hidden by the [submission] option; the style
-% file prints ``Anonymous submission'' in its place):
-% \author{Tim Sereda}
-% \affiliations{\texttt{timgsereda@gmail.com}}
-\author{Anonymous submission}
-\affiliations{Anonymous submission}
+% TODO(arXiv): fill in Jha's first name and confirm the affiliation, matching
+% main.tex.
+\author{
+    Tim Sereda\textsuperscript{1},
+    \textbf{??}~Jha\textsuperscript{1}
+}
+\affiliations{
+    \textsuperscript{1}University of South Dakota\\
+    \texttt{timgsereda@gmail.com}
+}
 % -----------------------------------------------------------------------
 
 % Cross-reference the main paper's labels (Table/Section numbers).
@@ -61,8 +66,12 @@
 % Override the main paper's title for the appendix.
 \title{Technical Appendix:\\ One-Step Is Optimal --- Unconditional Rectified
        Flows are Noise2Noise Denoisers}
-\author{Anonymous submission}
-\affiliations{Anonymous submission}
+% \affiliations is single-use in aaai2026.sty (its body redefines the macro), so
+% only \title/\author are re-issued here; the preamble affiliation still applies.
+\author{
+    Tim Sereda\textsuperscript{1},
+    \textbf{??}~Jha\textsuperscript{1}
+}
 \maketitle
 
 \input{supplementary_appendix}

@@ -1,7 +1,8 @@
 \documentclass[letterpaper]{article} % DO NOT CHANGE THIS
-% Anonymous-submission mode; for the camera-ready, drop the [submission]
-% option and restore the author block below.
-\usepackage[submission]{aaai2026}
+% arXiv preprint mode: [draft] shows the author block and suppresses the AAAI
+% copyright slug (that slug belongs only on an accepted camera-ready).  For an
+% anonymous conference submission, switch this back to [submission].
+\usepackage[draft]{aaai2026}
 \usepackage{times}          % DO NOT CHANGE THIS
 \usepackage{helvet}         % DO NOT CHANGE THIS
 \usepackage{courier}        % DO NOT CHANGE THIS
@@ -36,12 +37,16 @@
        Noise2Noise Denoisers, and Multi-Step Integration Provably Hurts---\\
        A Benchmark and Task-Based Detectability Study on Low-Dose CT}
 
-% Camera-ready author block (hidden by the [submission] option; the style
-% file prints ``Anonymous submission'' in its place):
-% \author{Tim Sereda}
-% \affiliations{\texttt{timgsereda@gmail.com}}
-\author{Anonymous submission}
-\affiliations{Anonymous submission}
+% TODO(arXiv): fill in Jha's first name (and middle initial, if used) and
+% confirm the affiliation line before uploading.
+\author{
+    Tim Sereda\textsuperscript{1},
+    \textbf{??}~Jha\textsuperscript{1}
+}
+\affiliations{
+    \textsuperscript{1}University of South Dakota\\
+    \texttt{timgsereda@gmail.com}
+}
 % -----------------------------------------------------------------------
 
 \begin{document}
@@ -51,19 +56,19 @@
 \begin{abstract}
 Iterative and generative denoisers are increasingly deployed on the assumption
 that refining a sample over many steps beats a single regression pass.  We prove
-the opposite for \emph{label-free} denoising.  An \emph{unconditional} rectified
+the opposite for label-free denoising.  An unconditional rectified
 flow, trained on two noisy observations of the same signal (the Noise2Noise
 setting), has a minimiser whose one-step readout is exactly the MMSE
 denoiser, recovered with no clean targets, and any multi-step integration
-\emph{provably departs} from it---exactly so in a tractable Gaussian model---because
+provably departs from it---exactly so in a tractable Gaussian model---because
 the flow's terminal marginal is the noisy law, not the clean signal.  A
 matched-pairing experiment confirms both halves: one-step flow ties a direct
 regressor, while multi-step Euler integration monotonically erodes fidelity,
-without ever fabricating structure.  This failure \emph{grows
-with training}: a better-fit velocity integrates more faithfully toward the noisy
+without ever fabricating structure.  This failure grows
+with training: a better-fit velocity integrates more faithfully toward the noisy
 terminal law, so multi-step quality degrades as the model improves, a prediction
 the departure result makes and the experiments bear out.
-What does the work is therefore the decorrelated \emph{pairing}, not the flow
+What does the work is therefore the decorrelated pairing, not the flow
 machinery: a one-step regressor on those pairs is our best label-free result
 ($+1.99$\,dB).  We establish this on \textbf{CTDenoiser}, an open benchmark we use
 as a controlled, matched-data testbed for the claim: five architectures across
@@ -73,9 +78,9 @@ beats the noisy baseline, while blind-spot Noise2Void is
 flat-to-negative, because CT's spatially correlated noise violates the
 pixel-independence these methods assume.  Under a task-based channelized
 Hotelling observer, the $\sim$4\,dB PSNR that supervised denoisers do gain
-\emph{erodes} low-contrast lesion detectability rather than improving it, a shift
-PSNR and SSIM miss.  All code, model definitions, and data-loading utilities will
-be released openly (repository link withheld for anonymous review).
+erodes low-contrast lesion detectability rather than improving it, a shift
+PSNR and SSIM miss.  All code, model definitions, and data-loading utilities are
+released openly at \url{https://github.com/tsereda/CTDenoiser}.
 \end{abstract}
 
 % -----------------------------------------------------------------------
@@ -84,19 +89,19 @@ be released openly (repository link withheld for anonymous review).
 Iterative and generative denoisers, such as diffusion and flow-matching models, are
 increasingly deployed on the assumption that modelling the full distribution of
 clean images, and refining a sample over many steps, buys quality over a single
-regression pass.  We show that for \emph{label-free} denoising this assumption is
+regression pass.  We show that for label-free denoising this assumption is
 provably counter-productive.  Trained on two independent noisy observations of the
-same signal (the Noise2Noise setting), an \emph{unconditional} rectified flow has
+same signal (the Noise2Noise setting), an unconditional rectified flow has
 a minimiser whose one-step readout is exactly the Noise2Noise MMSE denoiser (a
 direct regressor), and we prove that integrating the learned ODE for any positive
-time \emph{monotonically increases} denoising error, because the flow's terminal
+time monotonically increases denoising error, because the flow's terminal
 marginal is the noisy law, not the clean signal.  A matched-data, matched-backbone
 experiment confirms both halves: one-step flow ties a direct regressor, and
 multi-step Euler integration erodes it monotonically, without ever fabricating
 structure.  We establish this on low-dose computed tomography (CT), where errors
 carry clinical weight: CT's spatially correlated reconstruction noise breaks the
 pixel-independence assumption behind blind-spot self-supervision, and a task-based
-observer shows the fidelity gains denoisers do achieve can \emph{erode} diagnostic
+observer shows the fidelity gains denoisers do achieve can erode diagnostic
 detectability rather than improve it.
 
 Computed tomography (CT) is a cornerstone of modern medical imaging, but
@@ -114,9 +119,9 @@ encoder-decoders~\cite{chen2017lowdose} and
 transformers~\cite{wang2022ctformer} now achieve near full-dose image
 quality on the TCIA LDCT benchmark~\cite{moen2021low}, while diffusion
 and flow-based generative models are beginning to emerge as an
-alternative that models the full \emph{distribution} of plausible clean
+alternative that models the full distribution of plausible clean
 images rather than a single point estimate.  The harder regime is
-\emph{label-free} denoising, where paired full-dose targets are
+label-free denoising, where paired full-dose targets are
 unavailable; here CT's spatially correlated reconstruction noise breaks the
 pixel-independence assumption that underpins blind-spot and downsampling
 self-supervision.
@@ -142,16 +147,16 @@ We address this with CTDenoiser, a self-contained benchmark that:
 
 The benchmark serves the theoretical result rather than standing as an end in
 itself: its matched-data, matched-backbone control is what lets the
-label-free flow-versus-regression comparison below isolate the \emph{estimator}
-from the \emph{pairing}, and turn the one-step-optimality claim into a controlled
+label-free flow-versus-regression comparison below isolate the estimator
+from the pairing, and turn the one-step-optimality claim into a controlled
 test rather than an isolated observation.
 
 Our contributions are: (i) a theoretical result---an unconditional rectified
 flow trained on Noise2Noise pairs recovers the one-step MMSE denoiser, together
 with a finite-step departure proposition proving (exactly, in a tractable
 Gaussian model) that multi-step integration monotonically worsens it, with the
-counterintuitive corollary that the degradation \emph{grows as the velocity is
-better fit} (Section~\ref{sec:method}); (ii) a matched-data,
+counterintuitive corollary that the degradation grows as the velocity is
+better fit (Section~\ref{sec:method}); (ii) a matched-data,
 matched-backbone experiment confirming both halves---one-step flow ties direct
 regression while iteration erodes it---on a reproducible five-architecture,
 five-regime LDCT benchmark with a corrected full-slice evaluation
@@ -159,7 +164,7 @@ five-regime LDCT benchmark with a corrected full-slice evaluation
 method to reliably beat the noisy input is the correlated-noise-aware Noise2Sim;
 and (iii) a task-based, hallucination-aware detectability evaluation---a
 channelized Hotelling observer with a corrected noise-power spectrum---showing the
-benchmark's PSNR/SSIM gains \emph{erode} low-contrast lesion detectability without
+benchmark's PSNR/SSIM gains erode low-contrast lesion detectability without
 fabricating structure (Section~\ref{sec:detect}).
 
 % -----------------------------------------------------------------------
@@ -196,7 +201,7 @@ transport not merely optional but harmful to the denoising objective.
 When paired targets are unavailable, Noise2Noise~\cite{lehtinen2018noise2noise}
 recovers the clean signal in expectation by mapping between two independent noisy
 observations.  Noise2Void~\cite{krull2019noise2void} drops the second observation
-via a blind-spot scheme but assumes pixel-\emph{independent} noise---violated by
+via a blind-spot scheme but assumes pixel-independent noise---violated by
 CT's spatially correlated reconstruction noise---as does the single-image
 Neighbor2Neighbor~\cite{huang2021neighbor2neighbor}.  Two lines target correlated
 noise: Noise2Sim~\cite{niu2020noise2sim} maps between centre pixels of
@@ -219,12 +224,12 @@ denoised CT~\cite{lee2025ldctiqa}, and penalise generative models that
 hallucinate plausible high-frequency detail---motivating perceptual and texture
 measures such as LPIPS~\cite{zhang2018unreasonable} and the noise power spectrum
 (NPS)~\cite{solomon2012characterization}.  The stronger standard is
-\emph{task-based}: channelized Hotelling observers (CHO) estimate detectability
+task-based: channelized Hotelling observers (CHO) estimate detectability
 ($d'$, AUC) on signal-known-exactly / background-known-statistically tasks.
 Bhadra et al.~\cite{bhadra2021halluc} formalised hallucination via the
 measurement/null-space decomposition and Tivnan et al.~\cite{tivnan2024halluc} a
 Hallucination Index; applied to denoisers, Li et al.~\cite{li2021detection} and
-Kc \& Zeng~\cite{kc2024lgcho} showed deep denoising can \emph{destroy}
+Kc \& Zeng~\cite{kc2024lgcho} showed deep denoising can destroy
 task-relevant information---even beating full-dose on PSNR/SSIM while losing
 low-contrast detectability---motivating the detectability evaluation of
 Section~\ref{sec:detect}.
@@ -335,7 +340,7 @@ neighbours by a margin $m = P/4$, and predictions in the overlap region are
 blended by a weighted mean over patch contributions.  Patches at the image
 boundary retain their full extent: the margin is discarded only on sides
 shared with a neighbouring patch, never on a side that abuts the image
-edge.  An earlier version that discarded the margin on \emph{all} sides
+edge.  An earlier version that discarded the margin on all sides
 left each slice's outer $m$-pixel border unpopulated (set to zero); because
 the identity baseline does not pass through this routine, that artefact
 biased the reconstruction metrics of every trained model.  All results
@@ -363,7 +368,7 @@ pretrained features are required.
 where $\mathcal{F}$ is the 2-D DFT.  This measures the fraction of
 clean-image spectral energy present in the residual error and is sensitive
 to hallucinated high-frequency texture~\cite{gao2023corediff} that PSNR and
-SSIM may miss.  RSR is a frequency-domain \emph{error} ratio against the
+SSIM may miss.  RSR is a frequency-domain error ratio against the
 reference and should not be confused with the conventional CT noise-power
 spectrum (NPS), which characterises the spectrum of the noise itself,
 estimated from uniform-region ROIs; the latter is what we report as the NPS
@@ -385,7 +390,7 @@ evaluation.  The per-image methods (ZS-N2N, Filter2Noise) optimise one
 network per validation image and are model-agnostic.  Validation metrics
 are computed over full slices using the corrected overlapped inference of
 Section~\ref{sec:inference} with margin $P/4 = 16$.  We report the gain
-($\Delta$) of each metric relative to the unprocessed \emph{LDCT input},
+($\Delta$) of each metric relative to the unprocessed LDCT input,
 the floor every method must beat.
 
 \subsection{Results}
@@ -399,7 +404,7 @@ the floor every method must beat.
            grouped by supervision regime.  Mean\,$\pm$\,s.d.\ over $3$ seeds on
            full slices via overlapped tiling (corrected border handling).  The
            PSNR column gives the absolute value with the gain over each split's
-           \emph{LDCT input} floor in parentheses (mean floor $30.25$\,dB).  All
+           LDCT input floor in parentheses (mean floor $30.25$\,dB).  All
            five architectures are complete over $3$ seeds.  CFM requires paired
            targets, so it has no blind-spot or similarity variant.  The
            label-free SSFlow and its one- vs.\ multi-step ablation are in
@@ -466,12 +471,12 @@ a Channelized Hotelling Observer (CHO) on a signal-known-exactly /
 background-known-statistically (SKE/BKS) task.  No CT forward projector is
 needed: because the dataset provides real paired low/full acquisitions, the
 real spatially-correlated FBP noise is $n = x_\text{low} - x_\text{full}$, so a
-signal-present low-dose image is \emph{literally} $x_\text{low} + s$ for a known
+signal-present low-dose image is literally $x_\text{low} + s$ for a known
 lesion $s$ (the same correlated noise is re-attached by construction), and the
 signal-absent image is the untouched acquisition.  We insert Gaussian lesions of
 radius $4$\,px at $40/80/160$\,HU on flat in-body sites ($6$ per slice, $200$
-slices per run), extract present/absent ROIs at the \emph{input}, \emph{denoised}
-and \emph{clean} stages, channelise with ten Laguerre-Gauss channels, and compute
+slices per run), extract present/absent ROIs at the input, denoised
+and clean stages, channelise with ten Laguerre-Gauss channels, and compute
 the detectability index $d'$.  The observer is validated against the closed-form
 white-noise value $d' = \lVert s\rVert / \sigma$ as a unit test before use.  We
 run it on the completed three-seed benchmark models of
@@ -480,7 +485,7 @@ mean over architectures and seeds; CTformer reproduces the same erosion and is
 held out only to keep the aggregate architecturally homogeneous.  The
 per-image methods (ZS-N2N, Filter2Noise) are omitted---each CHO realisation would
 retrain their per-image network thousands of times---and the generative
-SSFlow/CFM detectability, which can \emph{fabricate} as well as erode, is reported
+SSFlow/CFM detectability, which can fabricate as well as erode, is reported
 separately.
 
 \begin{table*}[t]
@@ -495,11 +500,11 @@ separately.
            contrasts; these are method-independent and carry a large
            between-split (patient-cohort) s.d.\ ($\pm1.3$ at $160$\,HU), which is
            why we report the ratio below.  \emph{Bottom:} detectability
-           \emph{preserved}, $d'_\text{denoised}/d'_\text{input}$
+           preserved, $d'_\text{denoised}/d'_\text{input}$
            (mean\,$\pm$\,s.d.; $1.0=$ unchanged, $<1=$ eroded); the denoised
            noise-power-spectrum radial centroid (input $0.112$; lower $=$ more
-           low-frequency ``waxy'' texture); and the \emph{fabrication} $d'$ from
-           a CHO run on \emph{signal-absent} ROIs (input floor $0.028$; $>$floor
+           low-frequency ``waxy'' texture); and the fabrication $d'$ from
+           a CHO run on signal-absent ROIs (input floor $0.028$; $>$floor
            $=$ invented structure).  Architecture differences are within s.d.,
            so rows are aggregated by supervision regime.  $d'_\text{denoised}$ is
            below $d'_\text{input}$ in all $27$ runs and never exceeds the clean
@@ -524,28 +529,28 @@ separately.
 \end{table*}
 
 Table~\ref{tab:detect} shows four things.  \textbf{First}, the detectability
-\emph{headroom} is small---the clean reference exceeds the noisy input by only
+headroom is small---the clean reference exceeds the noisy input by only
 $\sim$2\% ($d'=6.18$ vs.\ $6.06$ at $160$\,HU)---which is the clinically relevant
 regime: at a realistic LDCT dose supra-threshold lesions are already detectable,
-so the question is whether denoising \emph{preserves} detectability, not whether
+so the question is whether denoising preserves detectability, not whether
 it recovers it.  \textbf{Second}, though these models gain $4.0$--$4.3$\,dB PSNR
 (supervised) and $1.7$--$1.8$\,dB (Noise2Sim) (Table~\ref{tab:results}), none
 improves detectability at the supra-threshold point:
 $d'_\text{denoised}<d'_\text{input}$ in all $27$ runs (a $7$--$8\%$ loss at
 $160$\,HU), none exceeds the clean ceiling, and the fabrication $d'$ stays at its
-floor ($0.022$--$0.033$ vs.\ $0.028$)---the denoisers \emph{erode} detectability
-without \emph{fabricating} it.  The loss concentrates at high contrast (within
+floor ($0.022$--$0.033$ vs.\ $0.028$)---the denoisers erode detectability
+without fabricating it.  The loss concentrates at high contrast (within
 $1$--$2\%$ near the $40$\,HU threshold), precisely where PSNR/SSIM report their
 largest gains.  \textbf{Third}, the models that win most on PSNR shift the NPS
 centroid furthest toward low frequency ($0.112\!\to\!0.087$, $22\%$, vs.\
 $0.112\!\to\!0.109$ for Noise2Void)---the blotchy ``waxy'' texture radiologists
 distrust (qualitative comparison, technical appendix).  \textbf{Fourth},
-differences \emph{between} regimes are not resolved at this sample size (preserved
+differences between regimes are not resolved at this sample size (preserved
 ratios at $160$\,HU $0.934{\pm}0.033$ supervised, $0.919{\pm}0.030$
 Noise2Sim/Noise2Void overlap within one s.d.), so the data support the
-\emph{erosion} claim---every regime sits below $1.0$---but not a regime-vs-regime
+erosion claim---every regime sits below $1.0$---but not a regime-vs-regime
 ranking; only the NPS-centroid shift separates supervised from blind-spot.  The
-\emph{preserved} ratio cancels the large between-split variation in absolute $d'$
+preserved ratio cancels the large between-split variation in absolute $d'$
 ($\pm1.31$ at $160$\,HU) and is stable across seeds.  None of this appears in PSNR
 or SSIM, which rise monotonically; task-based $d'$ is a necessary complement, not
 an optional one.
@@ -556,14 +561,14 @@ an optional one.
 
 The results above leave a $\sim$2\,dB gap between the best label-free
 method and supervised training.  Our methodological contribution is a pair of
-results: the velocity field of an \emph{unconditional} rectified flow, trained on
+results: the velocity field of an unconditional rectified flow, trained on
 two noisy observations of the same signal, has a minimiser that recovers the
-Noise2Noise posterior mean in a \emph{single} step (Section~\ref{sec:rf-n2n})---no
-clean targets, no ODE integration---and any multi-step integration \emph{provably
-departs} from that optimum.  We instantiate the one-step result as SSFlow, a
+Noise2Noise posterior mean in a single step (Section~\ref{sec:rf-n2n})---no
+clean targets, no ODE integration---and any multi-step integration provably
+departs from that optimum.  We instantiate the one-step result as SSFlow, a
 denoiser for the correlated noise of FBP-reconstructed LDCT
 (Section~\ref{sec:ss-pairs}): it pairs the unconditional flow with a
-\emph{similarity-based} construction of the noisy pairs that keeps the paired
+similarity-based construction of the noisy pairs that keeps the paired
 noise independent despite spatial correlation.  A matched-pairing ablation
 (Section~\ref{sec:ss-pairs}) confirms both results---one-step flow ties a direct
 regressor while multi-step refinement monotonically hurts---so SSFlow is best
@@ -576,7 +581,7 @@ Let $s$ be the (unobserved) clean slice and let $x_0=s+n_0,\ x_1=s+n_1$ be
 two noisy observations with $\mathbb{E}[n_i\mid s]=0$ and
 $n_0\perp n_1\mid s$.  Using the same straight-line interpolant
 $z_t=(1-t)x_0+t\,x_1$ as Eq.~\eqref{eq:rectified-target}, we train an
-\emph{unconditional} velocity network $v_\theta(z,t)$ (inputs: the
+unconditional velocity network $v_\theta(z,t)$ (inputs: the
 interpolant $z$ and time $t$ only, in contrast to the conditional field of
 Eq.~\eqref{eq:cfm-loss}) with
 
@@ -612,16 +617,16 @@ label-free setting: the flow-matching denoising identity---an optimally trained 
 yields the one-step MMSE estimator $\mathbb{E}[x_1\mid x_t]$ at each
 level~\cite{gagneux2025phases,albergo2023stochastic}---and the Noise2Noise
 conditional-mean identity~\cite{lehtinen2018noise2noise}.  Prior statements of
-the former assume a \emph{clean} target $x_1$; the label-free, symmetric
+the former assume a clean target $x_1$; the label-free, symmetric
 two-noisy-realisation case ($\mathbb{E}[x_1\mid s]=\mathbb{E}[x_0\mid s]=s$) is
-what is new here, and it is what makes the one-step map a \emph{self-supervised} MMSE
+what is new here, and it is what makes the one-step map a self-supervised MMSE
 denoiser.  The equivalence is specific to the $L_2$/velocity-MSE objective
 (whose minimiser is the conditional mean, not the median or mode) and to the
-\emph{restoration} objective---the opposite of the Ambient Diffusion
+restoration objective---the opposite of the Ambient Diffusion
 regime~\cite{daras2023ambient}, where noisy-only training deliberately
-\emph{samples} the clean distribution rather than collapsing to its mean.  It is
+samples the clean distribution rather than collapsing to its mean.  It is
 a population-level identity at the optimum; how far a finite-capacity,
-finite-step flow \emph{departs} from it is the empirical question
+finite-step flow departs from it is the empirical question
 Section~\ref{sec:ss-pairs} answers---and it departs by losing to direct
 regression.
 
@@ -629,7 +634,7 @@ regression.
 If the network is additionally given $x_0$ (as in
 Eq.~\eqref{eq:cfm-loss}), then $(z_t,x_0,t)$ determines the target exactly,
 $x_1=(z_t-(1-t)x_0)/t$: the regression target is fully observed and the
-network reproduces the \emph{noisy} $x_1$ rather than averaging over it,
+network reproduces the noisy $x_1$ rather than averaging over it,
 destroying \eqref{eq:ss-mmse}.  Dropping the conditioning makes each $z_t$
 consistent with many pairs, forcing the network to predict their average
 velocity, where the independent noise cancels.
@@ -643,19 +648,19 @@ neighbouring pixels, so spatial-neighbour pairs
 ZS-N2N~\cite{mansour2023zsn2n}) are only valid when the noise correlation
 length is below the pixel pitch.  We instead adopt the non-local
 construction of Noise2Sim~\cite{niu2020noise2sim}: for each query patch we
-retrieve its $K$ most similar patches elsewhere in the slice, \emph{excluding}
+retrieve its $K$ most similar patches elsewhere in the slice, excluding
 a radius $r$ around the query so matched patches lie beyond the noise
 correlation length.  Self-similarity matches the signal while spatial
 separation decorrelates the noise, yielding a valid pair $(x_0,x_1)$ from a
 single image; $r$ is the key correlated-noise hyper-parameter.  At
 inference, the one-step estimate is $\hat s = x + v_\theta(x,0)$, optionally
 refined with a few Euler steps of the learned ODE initialised at the noisy
-input; we do \emph{not} integrate to the noisy endpoint distribution.
+input; we do not integrate to the noisy endpoint distribution.
 
 \paragraph{Multi-step refinement provably departs from the optimum.}
-The one-step readout is exact \emph{only} at $t{=}0$; integrating further
+The one-step readout is exact only at $t{=}0$; integrating further
 provably increases denoising error, because the flow's terminal marginal is the
-\emph{noisy} law $p_1$, not the clean signal.  We make this precise in the
+noisy law $p_1$, not the clean signal.  We make this precise in the
 tractable jointly-Gaussian model (per spectral mode: signal variance
 $\sigma_s^2$, independent noise variance $\sigma_n^2$ on each observation), where
 $v^\star$ is linear and the ODE $\dot z=v^\star(z,t)$ integrates in closed form to
@@ -675,7 +680,7 @@ $[0,1]$, from the Wiener/MMSE coefficient
 $\kappa(0)=\sigma_s^2/(\sigma_s^2+\sigma_n^2)$ to $\kappa(1)=1$ (the identity---no
 denoising); hence the denoising risk
 $R(t)=(\kappa(t)-1)^2\sigma_s^2+\kappa(t)^2\sigma_n^2$ is strictly increasing in
-$t$.  The one-step estimate ($t{=}0$) is therefore \emph{exactly} optimal, and each
+$t$.  The one-step estimate ($t{=}0$) is therefore exactly optimal, and each
 Euler step moves the estimate monotonically back toward the raw noisy input.
 
 \emph{Proof.}  Differentiating
@@ -686,11 +691,11 @@ only at $t{=}1$, so $\kappa$ strictly increases; $R$ is convex in $\kappa$ with
 minimiser $\kappa(0)$, hence strictly increasing in $t$.\hfill$\square$
 
 Two consequences match the ablation.  \emph{(a) Refinement cannot help:} even the
-\emph{exact} continuous flow under-shrinks for every $t>0$, and Euler
+exact continuous flow under-shrinks for every $t>0$, and Euler
 discretisation only compounds it, so multi-step is dominated by one-step at the
 population level---not merely empirically.  \emph{(b) A training paradox:} a
-\emph{better}-trained velocity integrates \emph{more} faithfully toward the noisy
-endpoint, so multi-step degrades \emph{as training proceeds}---exactly the
+better-trained velocity integrates more faithfully toward the noisy
+endpoint, so multi-step degrades as training proceeds---exactly the
 counter-intuitive trend in Table~\ref{tab:ssflow-steps}.  The one-step posterior
 mean is thus the provably optimal readout on N2N pairs, and the cost of iteration
 is now made precise rather than merely observed.
@@ -698,7 +703,7 @@ is now made precise rather than merely observed.
 \paragraph{Ablation.}
 By \eqref{eq:ss-mmse}, the one-step estimate coincides with
 similarity-based Noise2Noise regression; the flow is justified only if
-\emph{multi-step refinement improves the structured residual} that one-step
+multi-step refinement improves the structured residual that one-step
 MMSE leaves behind.  We isolate this over the exclusion radius $r\in\{1,2,3\}$
 and the inference-step count $\{1,4,8,20\}$ (Table~\ref{tab:ssflow-steps}), and
 against the direct regressor at matched pairing (technical appendix).
@@ -707,10 +712,10 @@ Three findings emerge.
 shallow inverted-U in $r$, peaking at $r{=}2$ ($+1.88$\,dB); $r{=}1$---which
 excludes only the query pixel, recovering the plain Noise2Sim target---is
 $0.13$\,dB lower and $r{=}3$ is $0.19$\,dB lower, confirming that matching
-\emph{just beyond} the FBP correlation length is what helps.
+just beyond the FBP correlation length is what helps.
 \emph{(ii) Multi-step refinement does not help; it hurts}---exactly as the
 finite-step departure of Eq.~\eqref{eq:kappa} predicts (Figure~\ref{fig:steps}).
-PSNR falls \emph{monotonically} with the step count, from $+1.88$ (one-step) to
+PSNR falls monotonically with the step count, from $+1.88$ (one-step) to
 $+0.93$, $+0.68$, $+0.52$\,dB at $4/8/20$ steps ($r{=}2$), with the same monotone
 decline at every $r$; consistent with the training paradox of the Proposition, val PSNR
 also peaks early and then declines while GMSD keeps improving, so we checkpoint at
@@ -719,18 +724,18 @@ the best-validation-PSNR epoch.  The one-step posterior mean of
 with ``no-new-denoiser'' reports that stochastic sampling trades fidelity for
 texture.
 \emph{(iii) One-step flow matches regression; the pairing is the contribution.}
-Swapping the estimator on the \emph{same} pairs (technical appendix)
+Swapping the estimator on the same pairs (technical appendix)
 confirms the theorem empirically: at matched $r$ the one-step flow and the direct
 regressor agree to within $\le0.2$\,dB ($r{=}2$: $+1.88$ vs.\ $+1.99$), tracing
 the same inverted-U.  A small residual favours regression (the finite-capacity
-caveat of Section~\ref{sec:rf-n2n}), so the decorrelated-pairing \emph{one-step
-regressor} at $r{=}2$ ($+1.99$\,dB)---the best label-free result in our
+caveat of Section~\ref{sec:rf-n2n}), so the decorrelated-pairing one-step
+regressor at $r{=}2$ ($+1.99$\,dB)---the best label-free result in our
 benchmark---is the estimator of choice: it ties the flow, needs no ODE
 integration, and iteration only hurts.  The transferable idea is the decorrelated
 non-local pairing, not the flow machinery; the same iteration penalty recurs in
 the supervised regime, where the multi-step CFM trails the MSE U-Net by
 $\sim$1\,dB (Section~\ref{sec:results}).  The scope of this claim is the
-\emph{distortion / task} criterion: consistent with matched-data CT
+distortion / task criterion: consistent with matched-data CT
 benchmarks~\cite{eulig2024benchmark}, regression wins on PSNR/SSIM and---by
 Section~\ref{sec:detect}---loses nothing on detectability, but a generative flow
 can still win on perceptual or radiomic-feature metrics that reward texture over
@@ -745,10 +750,10 @@ setting: BSDS500 natural images corrupted with white Gaussian noise
 (technical appendix).  Both predictions reproduce.  \emph{(i)} One-step
 flow ties the direct regressor at every $r$ (within $0.15$--$0.21$\,dB, the same
 small residual favouring regression as on CT).  \emph{(ii)} Multi-step Euler
-integration erodes PSNR \emph{monotonically}, $+3.9\!\to\!+1.3$\,dB over
-$1/4/8/20$ steps---a \emph{steeper} fall than on CT, as expected when the
+integration erodes PSNR monotonically, $+3.9\!\to\!+1.3$\,dB over
+$1/4/8/20$ steps---a steeper fall than on CT, as expected when the
 one-step gain is larger.  \emph{(iii)} Consistent with $r$ being the
-\emph{correlated}-noise knob, the exclusion radius barely matters here
+correlated-noise knob, the exclusion radius barely matters here
 ($\le0.1$\,dB across $r$): i.i.d.\ noise has no spatial correlation for a larger
 $r$ to break, exactly as the FBP-correlation account predicts.  The
 finite-step-departure result and one-step optimality are therefore properties of
@@ -763,7 +768,7 @@ the Noise2Noise objective, not of CT.
            \emph{(a)} In the jointly-Gaussian model the relative denoising risk
            $R(t)/R(0)$ of the flow's readout rises monotonically with integration
            time $t$ from the one-step optimum ($t{=}0$) --- iteration
-           \emph{provably} increases error (Eq.~\eqref{eq:kappa}).  \emph{(b)}
+           provably increases error (Eq.~\eqref{eq:kappa}).  \emph{(b)}
            Empirically, PSNR gain falls monotonically with the Euler step count at
            every decorrelation radius $r$ (\texttt{sweep\_hallucination.yml}, $3$
            seeds); the one-step values sit at the matched-pairing one-step
@@ -793,11 +798,11 @@ the flow or the pairing is what matters---is in the technical appendix.
            one-step posterior mean vs.\ multi-step Euler refinement across the
            decorrelation radius $r$, on TCIA LDCT (abdomen; $3$ seeds, $50$
            epochs).  PSNR gives the absolute value with the gain over the
-           $30.25$\,dB input floor.  \emph{PSNR degrades monotonically with the
-           step count} at every $r$---the $20$-step gain is roughly a third of the
+           $30.25$\,dB input floor.  PSNR degrades monotonically with the
+           step count at every $r$---the $20$-step gain is roughly a third of the
            one-step gain---exactly as the finite-step departure of
            Eq.~\eqref{eq:kappa} predicts, while the fabrication $d'$ holds at the
-           input floor ($\approx$$0.028$) at \emph{every} step count: iteration
+           input floor ($\approx$$0.028$) at every step count: iteration
            erodes fidelity without inventing structure.  \textbf{Bold}: best cell
            (one-step, $r{=}2$).  $\uparrow$/$\downarrow$: higher/lower is better.}
   \label{tab:ssflow-steps}
@@ -860,12 +865,12 @@ improved.  We recommend future CT-denoising work report task-based $d'$ alongsid
 these metrics.
 
 \paragraph{Limitations.}
-The \emph{clinical} evaluation is $3$-seed and patient-level; the
+The clinical evaluation is $3$-seed and patient-level; the
 supervision-regime ordering and the detectability erosion reproduce over $3$
-seeds on a \emph{simulated} low-dose source (same anatomy) and on a second
-\emph{anatomy} (chest), so neither is tied to one acquisition, noise model, or
+seeds on a simulated low-dose source (same anatomy) and on a second
+anatomy (chest), so neither is tied to one acquisition, noise model, or
 anatomy---multi-scanner replication is the natural next step.  The
-\emph{theoretical} claims are less domain-bound, reproducing on natural images
+theoretical claims are less domain-bound, reproducing on natural images
 under i.i.d.\ Gaussian noise.  The per-image methods (ZS-N2N, Filter2Noise) are
 reported single-split, as each CHO realisation would retrain their per-image
 network thousands of times.  The finite-step departure is proved exactly only in
@@ -885,19 +890,19 @@ RSR).  Once the evaluation is corrected, supervised denoisers gain
 $\sim$4\,dB over the noisy input, and among label-free methods only the
 correlated-noise-aware Noise2Sim reliably beats it while blind-spot
 Noise2Void degrades, leaving a $\sim$2\,dB gap to supervised.  Our central
-methodological contribution is a proof that an \emph{unconditional} rectified
+methodological contribution is a proof that an unconditional rectified
 flow, trained on two noisy observations of the same signal, recovers the
 Noise2Noise posterior mean in a single step without clean targets, together with
 a finite-step departure result showing any multi-step integration provably
 worsens it.  A matched-pairing experiment confirms both: one-step flow ties a
 direct regressor while multi-step Euler integration monotonically erodes
-fidelity, so the decorrelated \emph{pairing}, not the flow machinery, is what
+fidelity, so the decorrelated pairing, not the flow machinery, is what
 carries the method, and a one-step regressor on those pairs is our best label-free
 result ($+1.99$\,dB).  The practical implication is direct: because the multi-step
 penalty is provable rather than incidental, a label-free denoiser built for
 fidelity should read out the one-step posterior mean rather than integrate a
 generative trajectory---iteration buys texture, not accuracy.  All code is released
-to facilitate reproducibility.
+at \url{https://github.com/tsereda/CTDenoiser} to facilitate reproducibility.
 
 % ===== References (extra pages permitted by AAAI) =====
 
@@ -1137,25 +1142,5 @@ J.~B. Solomon, O.~Christianson, and E.~Samei.
 \newblock \emph{Medical Physics}, 39(10):6048--6055, 2012.
 
 \end{thebibliography}
-
-% ===== Reproducibility checklist: AAAI places this in the main PDF after the
-% references; it does NOT count toward the 7-page limit. =====
-
-\section{Reproducibility Checklist}
-\label{app:repro}
-This paper makes both theoretical and experimental contributions.
-\emph{Theory:} all claims (the one-step Noise2Noise/MMSE identity and the
-finite-step departure, Section~4) state their assumptions and include complete
-proofs in the jointly-Gaussian model.
-\emph{Data:} all experiments use public datasets---the TCIA Low-Dose CT and
-Projection benchmark and BSDS500 natural images---with the patient-level splits,
-HU windows, and preprocessing given in Section~3.1.
-\emph{Code:} the full training loop, model definitions, evaluation harness
-(overlapped tiling, CHO detectability, NPS), and every sweep configuration will
-be released openly (repository link withheld for anonymous review).
-\emph{Compute and settings:} architectures, parameter counts, optimiser, epochs,
-seeds ($3$ unless noted), and patch/batch sizes are reported in Section~3 and the
-table captions; results are mean\,$\pm$\,s.d.\ over $3$ seeds, including the
-chest and simulated-source robustness checks.
 
 \end{document}

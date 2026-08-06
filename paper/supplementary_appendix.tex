@@ -11,8 +11,8 @@
 \section{Robustness experiments}
 \label{app:robustness}
 The benchmark ordering is corroborated on two further axes below: an
-independent \emph{simulated} low-dose source (same anatomy) and a second
-\emph{anatomy} (chest). Both are summarised in the Limitations paragraph of
+independent simulated low-dose source (same anatomy) and a second
+anatomy (chest). Both are summarised in the Limitations paragraph of
 the main text.
 
 \subsection{Robustness to a second LDCT source}
@@ -21,7 +21,7 @@ The main benchmark (Table~\ref{tab:results}) draws its low-dose arm from one rea
 acquisition.  To check that the supervision-regime ordering is a property of
 correlated LDCT noise rather than of that single acquisition, we re-run the same
 architecture\,$\times$\,supervision grid on an independent low-dose source
-(\texttt{sweep\_sim\_ldct.yml}): the low-dose images are \emph{simulated} from the
+(\texttt{sweep\_sim\_ldct.yml}): the low-dose images are simulated from the
 same abdomen full-dose volumes with a correlated, signal-dependent noise model
 (\texttt{-{}-sim-base-std=0.03}, \texttt{-{}-sim-signal-std=0.06}), giving a
 harsher $28.3$\,dB input floor (vs.\ $30.25$\,dB real).  Everything else---patient
@@ -30,11 +30,11 @@ splits, patch size, optimiser, seeds, epochs---is held fixed.
 The regime ordering reproduces on the second source
 (Table~\ref{tab:sim-ldct}): supervised denoising gains $\sim$$4.5$--$4.9$\,dB with
 the three CNNs again within $0.4$\,dB of one another; among label-free methods
-Noise2Sim is the \emph{only} one that clears the noisy floor at every backbone,
+Noise2Sim is the only one that clears the noisy floor at every backbone,
 while blind-spot Noise2Void is flat-to-negative ($-0.09$ to $+0.04$\,dB).  The
 qualitative story is therefore source-independent.  Two magnitudes shift with the
 noise model, in the direction the mechanism predicts: Noise2Sim's margin
-\emph{compresses} to $+0.9$\,dB (from $+1.8$\,dB on the real source), because the
+compresses to $+0.9$\,dB (from $+1.8$\,dB on the real source), because the
 simulated field is more nearly stationary and leaves the similarity search less
 correlation structure to exploit; and Noise2Void moves toward---rather than
 below---the floor, as a milder correlation length lessens (without removing) its
@@ -46,7 +46,7 @@ source-dependent, which we report rather than average away.
   \small
   \caption{\textbf{Robustness to a second LDCT source} (\texttt{sweep\_sim\_ldct.yml}):
            the Table~\ref{tab:results} grid re-run with the low-dose arm
-           \emph{simulated} from the abdomen full-dose volumes (correlated,
+           simulated from the abdomen full-dose volumes (correlated,
            signal-dependent noise; $3$ seeds, $50$ epochs, matched splits).  PSNR
            gives the absolute value with the gain over the $28.26$\,dB simulated
            input floor in parentheses.  The supervision-regime ordering matches the
@@ -89,12 +89,12 @@ source-dependent, which we report rather than average away.
 \subsection{Robustness to a second anatomy}
 \label{sec:chest}
 The simulated-source check varies the noise model but holds the anatomy fixed.
-To vary the \emph{anatomy}, we re-run the benchmark grid on a chest LDCT cache
+To vary the anatomy, we re-run the benchmark grid on a chest LDCT cache
 (real low/full-dose pairs, $10$ patients, $8$ train / $2$ val), now across $3$
 seeds.  The supervision-regime ordering
 reproduces on the CNNs (Table~\ref{tab:chest}): supervised leads (RED-CNN
 $+3.21{\pm}0.14$\,dB over the $39.40$\,dB mean chest floor), Noise2Sim is again
-the \emph{only} label-free method clearly above the floor at every backbone
+the only label-free method clearly above the floor at every backbone
 ($+0.28$ to $+1.49$\,dB), and Noise2Void is within noise of the floor or below
 ($+0.42{\pm}0.68$\,dB at best, $-1.26$\,dB on DnCNN).  The task-based erosion
 reproduces too, and is if anything sharper: supervised RED-CNN preserves only
@@ -166,7 +166,7 @@ methods (Table~\ref{tab:sweep-periimage}).
            all three folds and are shown; U-Net had incomplete fold coverage at
            export.  Filter2Noise and ZS-N2N are per-image and model-agnostic
            (single row each).  \textbf{Bold}: best per column.
-           \underline{Underline}: best \emph{label-free} PSNR gain.}
+           \underline{Underline}: best label-free PSNR gain.}
   \label{tab:cv}
   \begin{tabular}{llccccc}
     \toprule
@@ -261,20 +261,20 @@ methods (Table~\ref{tab:sweep-periimage}).
   \caption{\textbf{Flow-vs-regression control} (\texttt{sweep\_flow\_vs\_reg.yml}
            $+$ \texttt{sweep\_hallucination.yml}): does the one-step theorem
            (Section~\ref{sec:rf-n2n}) hold empirically?  We fix the similarity
-           pairing and vary only the estimator.  The \emph{regression} arm is a
+           pairing and vary only the estimator.  The regression arm is a
            direct Noise2Sim regressor (RED-CNN, $1.85\mathrm{M}$ params,
            capacity-comparable to SSFlow's $2.11\mathrm{M}$ velocity net); the
-           \emph{flow} arm is one-step SSFlow.  Both sweep $r\in\{1,2,3\}$ over $3$
+           flow arm is one-step SSFlow.  Both sweep $r\in\{1,2,3\}$ over $3$
            seeds ($9$ runs each) on the identical pairs, so the arms overlay
-           cell-for-cell; PSNR gain is over each split's own input floor.  \emph{The
-           theorem holds:} at matched $r$ the one-step flow and the regressor agree
+           cell-for-cell; PSNR gain is over each split's own input floor.  The
+           theorem holds: at matched $r$ the one-step flow and the regressor agree
            to within $\le0.2$\,dB (e.g.\ $r{=}2$: $+1.88$ vs.\ $+1.99$), both
            tracing the same inverted-U that peaks at $r{=}2$---so the decorrelated
            pairing, not the estimator, is what helps.  A small residual favours
            regression (consistent with the finite-capacity caveat), so the
-           decorrelated-pairing \emph{one-step regressor} at $r{=}2$
+           decorrelated-pairing one-step regressor at $r{=}2$
            ($+1.99$\,dB) is the best label-free result and the estimator of
-           choice; the large cost is \emph{iteration}, not the objective---multi-step
+           choice; the large cost is iteration, not the objective---multi-step
            flow falls to $+0.5$\,dB (Table~\ref{tab:ssflow-steps}).  Fabrication
            $d'$ confirms neither estimator invents structure ($\approx$ input
            floor).  \textbf{Bold}: best cell.  $\uparrow$/$\downarrow$: higher/lower
@@ -313,7 +313,7 @@ methods (Table~\ref{tab:sweep-periimage}).
            denoised NPS radial centroid falls below the input (dashed)---the
            low-frequency ``waxy'' texture---most for the supervised models.
            \emph{(c)} Fabrication $d'$ stays at the signal-absent input floor
-           (dashed) for every regime: detectability is eroded \emph{without}
+           (dashed) for every regime: detectability is eroded without
            inventing structure.}
   \label{app:fig-detect}
 \end{figure*}
