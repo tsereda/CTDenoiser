@@ -1,6 +1,12 @@
 % =====================================================================
-% Standalone Technical Appendix (supplementary material) for the AAAI-26
-% submission. NOT part of the 7-page main paper.
+% Standalone Technical Appendix -- the ALTERNATIVE to binding the appendix
+% into main.tex.
+%
+% The arXiv preprint does NOT use this file: main.tex sets
+% \includeappendixtrue and \input{supplementary_appendix} directly, so the
+% whole paper is one PDF. Use this wrapper only for a page-limited venue
+% where the appendix must be a separate upload -- and set
+% \includeappendixfalse in main.tex first, or the content appears twice.
 %
 % COMPILE ORDER: build main.tex FIRST (produces main.aux), then build this
 % file twice. \externaldocument{main} then resolves cross-references
@@ -50,7 +56,7 @@
     Debesh Jha\textsuperscript{1}
 }
 \affiliations{
-    \textsuperscript{1}University of South Dakota\\
+    \textsuperscript{1}Department of Computer Science, University of South Dakota\\
     \texttt{timgsereda@gmail.com}
 }
 % -----------------------------------------------------------------------

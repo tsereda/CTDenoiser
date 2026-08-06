@@ -1,11 +1,17 @@
-% Supplementary material split out of main.tex for the EAAI-26 submission.
-% EAAI-26 allows 7 pages of content + up to 2 pages of references only --
-% no technical appendix travels with the submission PDF. This content is
-% preserved here (robustness experiments, supplementary tables, and the
-% reproducibility checklist) for the repository and any future venue that
-% permits an appendix. It is not compiled into the submission.
+% Technical appendix body (robustness experiments, supplementary tables,
+% qualitative comparison, additional method tables).  It is \input by two
+% wrappers and should stay standalone-agnostic:
+%
+%   main.tex           -- binds it after the references for the single-file
+%                         arXiv upload (\includeappendixtrue).
+%   supplementary.tex  -- compiles it as a separate PDF for a page-limited
+%                         venue where the appendix does not travel with the
+%                         submission; that route needs main.aux built first.
+%
+% Cross-references to the main text (Table~\ref{tab:results}, Section~4, ...)
+% resolve natively under main.tex and via xr under supplementary.tex.
 
-% ===== Supplementary material: after references; not counted in the 7-page limit =====
+% ===== Technical appendix: placed after the references =====
 \appendix
 
 \section{Robustness experiments}

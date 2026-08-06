@@ -27,6 +27,12 @@
 \pdfinfo{
 /TemplateVersion (2026.1)
 }
+% Bind the technical appendix into this document (single-file arXiv upload).
+% For a page-limited venue where the appendix does not travel with the
+% submission PDF, set \includeappendixfalse and build supplementary.tex instead.
+\newif\ifincludeappendix
+\includeappendixtrue
+
 % Section + subsection numbers (sanctioned by the AAAI template: "May be
 % changed to 1 or 2 if section numbers are desired"); the paper cross-references
 % subsections, so numbering depth 2 is required for \ref to resolve.
@@ -42,7 +48,7 @@
     Debesh Jha\textsuperscript{1}
 }
 \affiliations{
-    \textsuperscript{1}University of South Dakota\\
+    \textsuperscript{1}Department of Computer Science, University of South Dakota\\
     \texttt{timgsereda@gmail.com}
 }
 % -----------------------------------------------------------------------
@@ -542,7 +548,7 @@ $1$--$2\%$ near the $40$\,HU threshold), precisely where PSNR/SSIM report their
 largest gains.  \textbf{Third}, the models that win most on PSNR shift the NPS
 centroid furthest toward low frequency ($0.112\!\to\!0.087$, $22\%$, vs.\
 $0.112\!\to\!0.109$ for Noise2Void)---the blotchy ``waxy'' texture radiologists
-distrust (qualitative comparison, technical appendix).  \textbf{Fourth},
+distrust (qualitative comparison, Appendix~\ref{app:qual}).  \textbf{Fourth},
 differences between regimes are not resolved at this sample size (preserved
 ratios at $160$\,HU $0.934{\pm}0.033$ supervised, $0.919{\pm}0.030$
 Noise2Sim/Noise2Void overlap within one s.d.), so the data support the
@@ -704,7 +710,7 @@ similarity-based Noise2Noise regression; the flow is justified only if
 multi-step refinement improves the structured residual that one-step
 MMSE leaves behind.  We isolate this over the exclusion radius $r\in\{1,2,3\}$
 and the inference-step count $\{1,4,8,20\}$ (Table~\ref{tab:ssflow-steps}), and
-against the direct regressor at matched pairing (technical appendix).
+against the direct regressor at matched pairing (Table~\ref{tab:flow-vs-reg}).
 Three findings emerge.
 \emph{(i) The decorrelated pairing is what matters.}  PSNR follows a
 shallow inverted-U in $r$, peaking at $r{=}2$ ($+1.88$\,dB); $r{=}1$---which
@@ -722,7 +728,7 @@ the best-validation-PSNR epoch.  The one-step posterior mean of
 with ``no-new-denoiser'' reports that stochastic sampling trades fidelity for
 texture.
 \emph{(iii) One-step flow matches regression; the pairing is the contribution.}
-Swapping the estimator on the same pairs (technical appendix)
+Swapping the estimator on the same pairs (Table~\ref{tab:flow-vs-reg})
 confirms the theorem empirically: at matched $r$ the one-step flow and the direct
 regressor agree to within $\le0.2$\,dB ($r{=}2$: $+1.88$ vs.\ $+1.99$), tracing
 the same inverted-U.  A small residual favours regression (the finite-capacity
@@ -745,7 +751,7 @@ independence and an $L_2$ objective---nothing about CT---so both halves should
 hold on any Noise2Noise problem.  We check this on a non-medical, i.i.d.-noise
 setting: BSDS500 natural images corrupted with white Gaussian noise
 ($\sigma{=}0.1$), same SSFlow model, same $3$-seed exclude-radius grid
-(technical appendix).  Both predictions reproduce.  \emph{(i)} One-step
+(Table~\ref{tab:natural}).  Both predictions reproduce.  \emph{(i)} One-step
 flow ties the direct regressor at every $r$ (within $0.15$--$0.21$\,dB, the same
 small residual favouring regression as on CT).  \emph{(ii)} Multi-step Euler
 integration erodes PSNR monotonically, $+3.9\!\to\!+1.3$\,dB over
@@ -787,7 +793,7 @@ Table~\ref{tab:ssflow-steps} is the inference-steps ablation above
 (\texttt{sweep\_hallucination.yml}); its regression control
 (\texttt{sweep\_flow\_vs\_reg.yml})---holding the similarity pairing fixed and
 swapping the flow estimator for a direct Noise2Sim regressor to isolate whether
-the flow or the pairing is what matters---is in the technical appendix.
+the flow or the pairing is what matters---is in Appendix~\ref{app:method-tables}.
 
 \begin{table*}[t]
   \centering
@@ -846,7 +852,7 @@ contrast now isolates the objective at matched capacity: the flow-matching
 objective is a $\sim$1\,dB-worse route to the supervised optimum than direct MSE
 regression---a supervised-regime echo of the label-free flow-vs-regression gap
 that Section~\ref{sec:method} probes directly
-(technical appendix).
+(Appendix~\ref{app:method-tables}).
 
 \paragraph{Metric selection.}
 PSNR and SSIM penalise any pixel-level deviation, disadvantaging generative
@@ -1140,5 +1146,10 @@ J.~B. Solomon, O.~Christianson, and E.~Samei.
 \newblock \emph{Medical Physics}, 39(10):6048--6055, 2012.
 
 \end{thebibliography}
+
+% ===== Technical appendix (bound in for the preprint; see the toggle above) =====
+\ifincludeappendix
+\input{supplementary_appendix}
+\fi
 
 \end{document}
