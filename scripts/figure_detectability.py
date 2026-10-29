@@ -38,6 +38,11 @@ plt.rcParams.update({
 REGIMES = ["supervised", "n2sim", "n2v"]
 REGIME_LABEL = {"supervised": "Supervised", "n2sim": "Noise2Sim", "n2v": "Noise2Void"}
 REGIME_COLOR = {"supervised": "#4C72B0", "n2sim": "#55A868", "n2v": "#DD8452"}
+REGIME_MARKER = {"supervised": "o", "n2sim": "s", "n2v": "^"}
+REGIME_LINESTYLE = {"supervised": "-", "n2sim": "--", "n2v": ":"}
+# Horizontal offset (HU) per regime so near-identical curves (Noise2Sim vs
+# Noise2Void) and their error bars do not draw on top of each other.
+REGIME_DODGE = {"supervised": -4.0, "n2sim": 0.0, "n2v": 4.0}
 CNN_MODELS = ["redcnn", "unet", "dncnn"]
 CONTRASTS = [40, 80, 160]
 
@@ -94,8 +99,10 @@ def make_fig(df: pd.DataFrame, out_dir: str, fmt: str) -> Path:
     for r in present:
         ys = [stats[r][c][0] for c in CONTRASTS]
         es = [stats[r][c][1] for c in CONTRASTS]
-        ax.errorbar(CONTRASTS, ys, yerr=es, marker="o", capsize=3, lw=1.8,
-                    color=REGIME_COLOR[r], label=REGIME_LABEL[r])
+        xs = [c + REGIME_DODGE[r] for c in CONTRASTS]
+        ax.errorbar(xs, ys, yerr=es, marker=REGIME_MARKER[r], ls=REGIME_LINESTYLE[r],
+                    capsize=3, lw=1.6, ms=5, color=REGIME_COLOR[r],
+                    label=REGIME_LABEL[r])
     ax.axhline(1.0, ls="--", color="#7f7f7f", lw=1)
     ax.text(CONTRASTS[-1], 1.002, "unchanged", color="#7f7f7f", fontsize=8,
             ha="right", va="bottom")

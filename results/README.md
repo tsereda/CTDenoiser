@@ -11,7 +11,8 @@ Each row is one run; `det/*` columns hold the CHO/NPS detectability metrics.
 
 ## Regenerate figures
 ```
-python scripts/figure_steps.py         results/hallucination_abdomen.csv --regression-ref 1.99 --out-dir figures --fmt pdf
+python scripts/figure_steps.py         results/hallucination_abdomen.csv --regression-ref 1.99 \
+    --natural-csv results/natural_hallucination_gaussian.csv --natural-regression-ref 4.09 --out-dir figures --fmt pdf
 python scripts/figure_detectability.py results/benchmark_abdomen.csv     --out-dir figures --fmt pdf
 ```
 Multi-anatomy exports (chest/head) drop in here with the same names + `_chest`/`_head`.
